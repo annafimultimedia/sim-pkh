@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 33% 98%;
+  --foreground: 222 47% 11%;
+  --muted: 215 25% 93%;
+  --muted-foreground: 215 16% 45%;
+  --card: 0 0% 100%;
+  --border: 214 22% 88%;
+  --primary: 157 72% 28%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 44 96% 50%;
+  --success: 152 62% 36%;
+  --warning: 35 92% 50%;
+  --danger: 350 84% 58%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.12), transparent 34rem),
+    linear-gradient(180deg, #f8fafc 0%, #eef6f2 100%);
+  color: hsl(var(--foreground));
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(18px);
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
+.table-scroll {
+  scrollbar-width: thin;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 5mm;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .print-sheet,
+  .print-sheet * {
+    visibility: visible;
+  }
+
+  .print-sheet {
+    position: absolute;
+    left: 0;
+    top: 0;
+    box-shadow: none !important;
+    border: 0 !important;
+    margin: 0 !important;
+    width: 200mm !important;
+    min-height: auto !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  .print-sheet table {
+    font-size: 9px !important;
+    line-height: 1.08 !important;
+  }
+
+  .print-sheet th,
+  .print-sheet td {
+    padding: 2px 3px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    vertical-align: middle !important;
+  }
+
+  .print-sheet td:last-child {
+    height: 7mm !important;
+    vertical-align: top !important;
+  }
+
+  .print-sheet table {
+    page-break-inside: auto;
+  }
+
+  .print-sheet tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+}
