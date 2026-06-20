@@ -17,31 +17,34 @@ export function signSession(user: SessionUser) {
 
 export async function ensureSessionTokenColumn() {
   if (ensuredSessionColumns) return;
-  try {
+  const columns = await query<{ COLUMN_NAME: string }>(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'users'
+       AND COLUMN_NAME IN ('current_session_token', 'last_seen_at')`
+  );
+  const names = new Set(columns.map((column) => column.COLUMN_NAME));
+  if (!names.has("current_session_token")) {
     await query("ALTER TABLE users ADD COLUMN current_session_token VARCHAR(120) NULL");
-  } catch (error: any) {
-    if (error?.code !== "ER_DUP_FIELDNAME" && error?.errno !== 1060) {
-      throw error;
-    }
   }
-  try {
+  if (!names.has("last_seen_at")) {
     await query("ALTER TABLE users ADD COLUMN last_seen_at DATETIME NULL");
-  } catch (error: any) {
-    if (error?.code !== "ER_DUP_FIELDNAME" && error?.errno !== 1060) {
-      throw error;
-    }
   }
   ensuredSessionColumns = true;
 }
 
 export async function ensureProfilePhotoColumn() {
   if (ensuredProfilePhotoColumn) return;
-  try {
+  const columns = await query<{ COLUMN_NAME: string }>(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'users'
+       AND COLUMN_NAME = 'profile_photo_path'`
+  );
+  if (!columns.length) {
     await query("ALTER TABLE users ADD COLUMN profile_photo_path VARCHAR(255) NULL");
-  } catch (error: any) {
-    if (error?.code !== "ER_DUP_FIELDNAME" && error?.errno !== 1060) {
-      throw error;
-    }
   }
   ensuredProfilePhotoColumn = true;
 }
@@ -72,7 +75,8 @@ export async function getOptionalSession(): Promise<SessionUser | null> {
       return null;
     }
     return { ...session, photoPath: rows[0]?.profile_photo_path ?? session.photoPath };
-  } catch {
+  } catch (error) {
+    console.error("Gagal memvalidasi sesi pengguna", error);
     return null;
   }
 }

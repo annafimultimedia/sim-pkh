@@ -1,12 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ActivePeriod, SessionUser } from "@/lib/types";
 import { PrimaryButton } from "./app-shell";
 
 export function SettingsClient({ activePeriod, appName, user }: { activePeriod: ActivePeriod; appName: string; user: SessionUser }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const photoSectionRef = useRef<HTMLDivElement | null>(null);
+  const passwordInputRef = useRef<HTMLInputElement | null>(null);
   const [name, setName] = useState(user.name);
   const [systemName, setSystemName] = useState(appName);
   const [year, setYear] = useState(String(activePeriod.year));
@@ -37,6 +40,17 @@ export function SettingsClient({ activePeriod, appName, user }: { activePeriod: 
     if (user.role === "ADMIN" && hasPeriodChange) changes.push("periode aktif");
     return changes.length ? changes.join(", ") : "data";
   }, [hasPeriodChange, hasSystemChange, name, password, user.name, user.role]);
+
+  useEffect(() => {
+    const focus = searchParams.get("focus");
+    if (focus === "photo") {
+      photoSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    if (focus === "password") {
+      passwordInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      passwordInputRef.current?.focus();
+    }
+  }, [searchParams]);
 
   function requestSave() {
     setMessage("");
@@ -141,42 +155,42 @@ export function SettingsClient({ activePeriod, appName, user }: { activePeriod: 
     <>
       <section className="max-w-3xl rounded-2xl border border-border bg-white p-4 shadow-soft sm:p-5">
         <div className="grid gap-4 sm:grid-cols-2">
+          <div ref={photoSectionRef} className="sm:col-span-2 flex flex-col gap-3 rounded-xl border border-border bg-slate-50 p-4 sm:flex-row sm:items-center">
+            <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full bg-primary/10 text-xl font-bold text-primary ring-2 ring-white">
+              {photoPreview ? <img src={photoPreview} alt="Foto profil" className="h-full w-full object-cover" style={photoSource ? { objectPosition: `${cropX}% ${cropY}%`, transform: `scale(${cropZoom})` } : undefined} /> : user.name.slice(0, 1).toUpperCase()}
+            </div>
+            <label className="text-sm font-medium">
+              Foto Profil {user.role === "PENDAMPING" ? "Pendamping" : "Admin"}
+              <input type="file" accept="image/*" onChange={(event) => choosePhoto(event.target.files?.[0])} className="mt-2 block w-full text-sm" />
+              <span className="mt-1 block text-xs text-muted-foreground">Foto dikompres otomatis, maksimal 1 MB.</span>
+            </label>
+          </div>
+          {photoSource ? (
+            <div className="sm:col-span-2 rounded-xl border border-border bg-white p-4">
+              <div className="grid gap-4 md:grid-cols-[180px_1fr] md:items-center">
+                <div className="mx-auto h-40 w-40 overflow-hidden rounded-full bg-slate-100 ring-4 ring-white shadow-soft">
+                  <img src={photoSource} alt="Crop foto profil" className="h-full w-full object-cover" style={{ objectPosition: `${cropX}% ${cropY}%`, transform: `scale(${cropZoom})` }} />
+                </div>
+                <div className="grid gap-3">
+                  <label className="text-sm font-semibold">
+                    Zoom
+                    <input type="range" min="1" max="2" step="0.01" value={cropZoom} onChange={(event) => setCropZoom(Number(event.target.value))} className="mt-1 w-full" />
+                  </label>
+                  <label className="text-sm font-semibold">
+                    Geser Horizontal
+                    <input type="range" min="0" max="100" value={cropX} onChange={(event) => setCropX(Number(event.target.value))} className="mt-1 w-full" />
+                  </label>
+                  <label className="text-sm font-semibold">
+                    Geser Vertikal
+                    <input type="range" min="0" max="100" value={cropY} onChange={(event) => setCropY(Number(event.target.value))} className="mt-1 w-full" />
+                  </label>
+                  <p className="text-xs text-muted-foreground">Atur sampai wajah pas di lingkaran. Hasil simpan akan mengikuti preview ini.</p>
+                </div>
+              </div>
+            </div>
+          ) : null}
           {user.role === "PENDAMPING" ? (
             <>
-              <div className="sm:col-span-2 flex flex-col gap-3 rounded-xl border border-border bg-slate-50 p-4 sm:flex-row sm:items-center">
-                <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full bg-primary/10 text-xl font-bold text-primary ring-2 ring-white">
-                  {photoPreview ? <img src={photoPreview} alt="Foto profil" className="h-full w-full object-cover" style={photoSource ? { objectPosition: `${cropX}% ${cropY}%`, transform: `scale(${cropZoom})` } : undefined} /> : user.name.slice(0, 1).toUpperCase()}
-                </div>
-                <label className="text-sm font-medium">
-                  Foto Profil Pendamping
-                  <input type="file" accept="image/*" onChange={(event) => choosePhoto(event.target.files?.[0])} className="mt-2 block w-full text-sm" />
-                  <span className="mt-1 block text-xs text-muted-foreground">Foto dikompres otomatis, maksimal 1 MB.</span>
-                </label>
-              </div>
-              {photoSource ? (
-                <div className="sm:col-span-2 rounded-xl border border-border bg-white p-4">
-                  <div className="grid gap-4 md:grid-cols-[180px_1fr] md:items-center">
-                    <div className="mx-auto h-40 w-40 overflow-hidden rounded-full bg-slate-100 ring-4 ring-white shadow-soft">
-                      <img src={photoSource} alt="Crop foto profil" className="h-full w-full object-cover" style={{ objectPosition: `${cropX}% ${cropY}%`, transform: `scale(${cropZoom})` }} />
-                    </div>
-                    <div className="grid gap-3">
-                      <label className="text-sm font-semibold">
-                        Zoom
-                        <input type="range" min="1" max="2" step="0.01" value={cropZoom} onChange={(event) => setCropZoom(Number(event.target.value))} className="mt-1 w-full" />
-                      </label>
-                      <label className="text-sm font-semibold">
-                        Geser Horizontal
-                        <input type="range" min="0" max="100" value={cropX} onChange={(event) => setCropX(Number(event.target.value))} className="mt-1 w-full" />
-                      </label>
-                      <label className="text-sm font-semibold">
-                        Geser Vertikal
-                        <input type="range" min="0" max="100" value={cropY} onChange={(event) => setCropY(Number(event.target.value))} className="mt-1 w-full" />
-                      </label>
-                      <p className="text-xs text-muted-foreground">Atur sampai wajah pas di lingkaran. Hasil simpan akan mengikuti preview ini.</p>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
               <label className="text-sm font-medium sm:col-span-2">
                 Nama Pendamping
                 <input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-border px-3" />
@@ -191,6 +205,7 @@ export function SettingsClient({ activePeriod, appName, user }: { activePeriod: 
               <label className="text-sm font-medium sm:col-span-2">
                 Nama Aplikasi
                 <input value={systemName} onChange={(event) => setSystemName(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-border px-3" />
+                <span className="mt-1 block text-xs text-muted-foreground">Nama ini tampil di sidebar dan nama aplikasi saat dipasang di mobile.</span>
               </label>
               <label className="text-sm font-medium">
                 Tahun Aktif
@@ -206,7 +221,7 @@ export function SettingsClient({ activePeriod, appName, user }: { activePeriod: 
           )}
           <label className="text-sm font-medium">
             Password Baru
-            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-border px-3" />
+            <input ref={passwordInputRef} type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-border px-3" />
           </label>
           <label className="text-sm font-medium">
             Konfirmasi Password
@@ -219,7 +234,7 @@ export function SettingsClient({ activePeriod, appName, user }: { activePeriod: 
       </section>
 
       {confirmOpen ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setConfirmOpen(false)}>
+        <div className="fixed inset-0 z-[500] overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setConfirmOpen(false)}>
           <div className="mx-auto w-full max-w-md rounded-2xl bg-white p-4 shadow-2xl sm:p-5" onPointerDown={(event) => event.stopPropagation()}>
             <h2 className="text-lg font-bold text-slate-900">Konfirmasi Perubahan</h2>
             <p className="mt-3 text-sm text-slate-600">Apakah Anda yakin melakukan perubahan pada {confirmText}?</p>

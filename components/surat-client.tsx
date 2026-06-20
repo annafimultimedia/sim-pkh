@@ -30,6 +30,7 @@ export function SuratClient({ rows, user }: { rows: SuratRow[]; user: SessionUse
   const [localRows, setLocalRows] = useState(rows);
   const [modal, setModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<SuratRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SuratRow | null>(null);
@@ -49,21 +50,27 @@ export function SuratClient({ rows, user }: { rows: SuratRow[]; user: SessionUse
 
   async function save() {
     setLoading(true);
+    setUploadProgress(file ? 1 : 0);
     setMessage("");
-    const body = new FormData();
-    Object.entries(form).forEach(([key, value]) => body.append(key, value));
-    if (file) body.append("file", file);
-    const res = await fetch("/api/surat", { method: "POST", body });
-    const json = await readJson(res);
-    setLoading(false);
-    if (!res.ok) {
-      setMessage(json.message ?? "Gagal menyimpan surat");
-      return;
+    try {
+      const body = new FormData();
+      Object.entries(form).forEach(([key, value]) => body.append(key, value));
+      if (file) body.append("file", file);
+      const result = await uploadSurat(body, (progress) => setUploadProgress(progress));
+      if (!result.ok) {
+        setMessage(result.json.message ?? "Gagal menyimpan surat");
+        return;
+      }
+      setModal(false);
+      setForm({ tanggalSurat: today(), perihal: "", catatan: "" });
+      setFile(null);
+      setUploadProgress(0);
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Gagal menyimpan surat");
+    } finally {
+      setLoading(false);
     }
-    setModal(false);
-    setForm({ tanggalSurat: today(), perihal: "", catatan: "" });
-    setFile(null);
-    router.refresh();
   }
 
   async function remove(row: SuratRow) {
@@ -121,14 +128,14 @@ export function SuratClient({ rows, user }: { rows: SuratRow[]; user: SessionUse
       />
 
       {modal ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setModal(false)}>
+        <div className="fixed inset-0 z-[500] overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => !loading && setModal(false)}>
           <section className="mx-auto w-full max-w-2xl rounded-2xl bg-white p-4 shadow-soft sm:p-5" onPointerDown={(event) => event.stopPropagation()}>
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-bold">Tambah Arsip Surat</h2>
                 <p className="text-sm text-muted-foreground">Isi data surat masuk dan lampiran bila ada.</p>
               </div>
-              <button onClick={() => setModal(false)} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-muted"><X className="h-5 w-5" /></button>
+              <button disabled={loading} onClick={() => setModal(false)} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-muted disabled:opacity-50"><X className="h-5 w-5" /></button>
             </div>
             <div className="grid gap-3">
               <Field label="Tanggal Surat"><input type="date" value={form.tanggalSurat} onChange={(e) => setForm((state) => ({ ...state, tanggalSurat: e.target.value }))} className={inputClass} /></Field>
@@ -152,6 +159,17 @@ export function SuratClient({ rows, user }: { rows: SuratRow[]; user: SessionUse
                 <p className="mt-2 text-xs text-muted-foreground">{file ? `${file.name} (${formatSize(file.size)})` : "Klik pilih file atau tarik file ke area ini. Maksimal 5 MB."}</p>
               </label>
             </div>
+            {loading ? (
+              <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3">
+                <div className="flex items-center justify-between text-xs font-bold text-primary">
+                  <span className="inline-flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Mengupload surat...</span>
+                  <span>{uploadProgress ? `${uploadProgress}%` : "Memproses"}</span>
+                </div>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-white ring-1 ring-primary/10">
+                  <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${uploadProgress || 8}%` }} />
+                </div>
+              </div>
+            ) : null}
             {message ? <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">{message}</p> : null}
             <div className="mt-5 flex justify-end gap-2">
               <button disabled={loading} onClick={() => setModal(false)} className="rounded-lg border border-border px-4 py-2 text-sm font-semibold disabled:opacity-60">Batal</button>
@@ -164,20 +182,29 @@ export function SuratClient({ rows, user }: { rows: SuratRow[]; user: SessionUse
       ) : null}
 
       {deleteTarget ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setDeleteTarget(null)}>
-          <section className="mx-auto w-full max-w-md rounded-2xl bg-white p-4 shadow-soft sm:p-5" onPointerDown={(event) => event.stopPropagation()}>
-            <div className="flex items-start gap-3">
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-700">
+        <div className="fixed inset-0 z-[510] overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setDeleteTarget(null)}>
+          <section className="mx-auto w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl" onPointerDown={(event) => event.stopPropagation()}>
+            <div className="flex items-start gap-4">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-rose-50 text-rose-700">
                 <Trash2 className="h-5 w-5" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h2 className="text-lg font-bold text-slate-900">Hapus Arsip Surat?</h2>
                 <p className="mt-2 text-sm text-slate-600">
-                  Arsip surat <span className="font-bold text-slate-900">{deleteTarget.perihal}</span> akan dihapus dari daftar.
+                  Arsip surat berikut akan dihapus dari daftar.
                 </p>
+                <div className="mt-3 rounded-xl border border-border bg-slate-50 px-3 py-2">
+                  <p className="text-xs font-bold uppercase text-muted-foreground">Perihal</p>
+                  <p className="mt-1 break-words text-sm font-bold leading-5 text-slate-900">{deleteTarget.perihal}</p>
+                </div>
               </div>
             </div>
-            <div className="mt-5 grid gap-2 sm:flex sm:justify-end">
+            {deleteTarget.filePath ? (
+              <p className="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold leading-6 text-rose-700 ring-1 ring-rose-100">
+                File lampiran surat ini juga akan dihapus permanen dari storage.
+              </p>
+            ) : null}
+            <div className="mt-5 grid grid-cols-2 gap-3">
               <button disabled={loading} onClick={() => setDeleteTarget(null)} className="h-10 rounded-lg border border-border px-4 text-sm font-semibold text-slate-700 disabled:opacity-60">Batal</button>
               <button disabled={loading} onClick={() => remove(deleteTarget)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 text-sm font-semibold text-white disabled:opacity-60">
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Ya, Hapus
@@ -188,7 +215,7 @@ export function SuratClient({ rows, user }: { rows: SuratRow[]; user: SessionUse
       ) : null}
 
       {preview ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setPreview(null)}>
+        <div className="fixed inset-0 z-[500] overflow-y-auto bg-slate-950/50 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setPreview(null)}>
           <section className="mx-auto flex h-[88vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-soft" onPointerDown={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3 border-b border-border p-4">
               <div className="min-w-0">
@@ -198,10 +225,10 @@ export function SuratClient({ rows, user }: { rows: SuratRow[]; user: SessionUse
               <button onClick={() => setPreview(null)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg hover:bg-muted"><X className="h-5 w-5" /></button>
             </div>
             <div className="min-h-0 flex-1 bg-slate-100 p-3">
-              <iframe src={preview.filePath} title={`Lampiran ${preview.perihal}`} className="h-full w-full rounded-xl border border-border bg-white" />
+              <iframe src={suratFileUrl(preview.filePath)} title={`Lampiran ${preview.perihal}`} className="h-full w-full rounded-xl border border-border bg-white" />
             </div>
             <div className="flex justify-end gap-2 border-t border-border p-3">
-              <a href={preview.filePath} download={preview.fileName || true} className="rounded-lg border border-border px-4 py-2 text-sm font-semibold">Unduh</a>
+              <a href={suratFileUrl(preview.filePath)} download={preview.fileName || true} className="rounded-lg border border-border px-4 py-2 text-sm font-semibold">Unduh</a>
               <button onClick={() => setPreview(null)} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white">Tutup</button>
             </div>
           </section>
@@ -240,4 +267,33 @@ async function readJson(response: Response) {
   } catch {
     return { message: text };
   }
+}
+
+function uploadSurat(body: FormData, onProgress: (progress: number) => void) {
+  return new Promise<{ ok: boolean; json: any }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/surat");
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      const progress = Math.max(1, Math.min(99, Math.round((event.loaded / event.total) * 100)));
+      onProgress(progress);
+    };
+    xhr.onload = () => {
+      onProgress(100);
+      let json: any = {};
+      try {
+        json = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+      } catch {
+        json = { message: xhr.responseText };
+      }
+      resolve({ ok: xhr.status >= 200 && xhr.status < 300, json });
+    };
+    xhr.onerror = () => reject(new Error("Upload surat gagal. Periksa koneksi server."));
+    xhr.onabort = () => reject(new Error("Upload surat dibatalkan."));
+    xhr.send(body);
+  });
+}
+
+function suratFileUrl(filePath: string) {
+  return `/api/surat/file?path=${encodeURIComponent(filePath)}`;
 }

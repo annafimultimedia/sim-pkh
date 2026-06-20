@@ -1,6 +1,7 @@
 import { query } from "./db";
 import { artData, kpmData, pendampingList } from "./sample-data";
-import { ActivePeriod, DeadlineTask, DistrictOption, GroupSummary, Kpm, Pendamping, ProvinceOption, RegencyOption, SessionUser, VillageOption } from "./types";
+import { ActivePeriod, AppNotification, DeadlineTask, DistrictOption, GroupSummary, HealthComponentType, HealthVerificationElder, Kpm, Pendamping, ProvinceOption, RegencyOption, SessionUser, VillageOption } from "./types";
+import { getReadNotificationIds } from "./notification-reads";
 
 type KpmRow = {
   id: number;
@@ -152,6 +153,213 @@ export async function getKpmForKelompok(user: SessionUser): Promise<Kpm[]> {
     console.error("Gagal membaca KPM kelompok", error);
     return [];
   }
+}
+
+export async function getHealthVerificationElders(user: SessionUser): Promise<HealthVerificationElder[]> {
+  try {
+    await ensureArtMembersExtraColumns();
+    const activePeriod = await getActivePeriod();
+    const profile = user.role === "PENDAMPING" ? await getPendampingProfileForUser(user.id) : null;
+    if (user.role === "PENDAMPING" && !profile) return [];
+    const regencyWhere = user.regency
+      ? "AND UPPER(fc.kabupaten) IN (UPPER(?), UPPER(REPLACE(?, 'KABUPATEN ', 'KAB. ')))"
+      : "";
+    const regencyParams = user.regency ? [user.regency, user.regency] : [];
+    const pendampingWhere = profile ? "AND fc.pendamping_id = ?" : "";
+    const kpmRows = await query<{
+      kpmId: number;
+      noKk: string;
+      pengurusNik: string;
+      namaPengurus: string;
+      jumlahHamilFc: number;
+      jumlahAudFc: number;
+      jumlahLansiaFc: number;
+      jumlahDisabilitasFc: number;
+      alamatFc: string;
+      alamat: string;
+      rt: string;
+      rw: string;
+      desa: string;
+      kecamatan: string;
+      pendamping: string;
+      groupId: number | null;
+      groupName: string | null;
+    }>(
+      `SELECT fc.id AS kpmId, fc.no_kk AS noKk, fc.nik AS pengurusNik,
+              fc.nama_penerima AS namaPengurus,
+              COALESCE(fc.hamil, 0) AS jumlahHamilFc,
+              COALESCE(fc.aud, 0) AS jumlahAudFc,
+              COALESCE(fc.lansia, 0) AS jumlahLansiaFc,
+              COALESCE(fc.disabil, 0) AS jumlahDisabilitasFc,
+              COALESCE(fc.alamat_fc, '') AS alamatFc,
+              COALESCE(fc.alamat, '') AS alamat,
+              COALESCE(fc.rt, '') AS rt, COALESCE(fc.rw, '') AS rw,
+              COALESCE(fc.kelurahan, '') AS desa, COALESCE(fc.kecamatan, '') AS kecamatan,
+              COALESCE(p.name, '') AS pendamping,
+              grouped.groupId, grouped.groupName
+       FROM kpm_final_closing fc
+       LEFT JOIN pendamping_profiles p ON p.id = fc.pendamping_id
+       LEFT JOIN (
+         SELECT gm.kpm_nik, MAX(g.id) AS groupId,
+                SUBSTRING_INDEX(GROUP_CONCAT(g.name ORDER BY g.created_at DESC SEPARATOR '||'), '||', 1) AS groupName
+         FROM p2k2_group_members gm
+         JOIN p2k2_groups g ON g.id = gm.group_id
+         WHERE g.year = ? AND g.stage = ? AND g.archived_at IS NULL
+         GROUP BY gm.kpm_nik
+       ) grouped ON grouped.kpm_nik = fc.nik
+       WHERE fc.year = ? AND fc.stage = ?
+         AND (COALESCE(fc.hamil, 0) + COALESCE(fc.aud, 0) + COALESCE(fc.lansia, 0) + COALESCE(fc.disabil, 0)) > 0
+         ${regencyWhere}
+         ${pendampingWhere}
+       ORDER BY fc.kecamatan, fc.kelurahan, fc.nama_penerima`,
+      [activePeriod.year, activePeriod.stage, activePeriod.year, activePeriod.stage, ...regencyParams, ...(profile ? [profile.id] : [])]
+    );
+
+    if (!kpmRows.length) return [];
+    const noKks = [...new Set(kpmRows.map((row) => row.noKk).filter(Boolean))];
+    const placeholders = noKks.map(() => "?").join(",");
+    const artRows = placeholders
+      ? await query<{ id: number; noKk: string; nik: string; nama: string; komponen: string; entrySource: string; healthKpmId: number | null; healthSlotNo: number | null; healthComponentType: HealthComponentType | null }>(
+          `SELECT a.id, a.no_kk AS noKk, a.nik, a.nama,
+                  UPPER(TRIM(COALESCE(a.komponen, ''))) AS komponen,
+                  COALESCE(a.entry_source, 'IMPORT') AS entrySource,
+                  a.health_kpm_id AS healthKpmId, a.health_slot_no AS healthSlotNo,
+                  a.health_component_type AS healthComponentType
+           FROM art_members a
+           WHERE a.no_kk IN (${placeholders})
+             AND (
+               UPPER(TRIM(COALESCE(a.komponen, ''))) LIKE '%HAMIL%'
+               OR UPPER(TRIM(COALESCE(a.komponen, ''))) IN ('USIA DINI', 'AUD')
+               OR UPPER(TRIM(COALESCE(a.komponen, ''))) LIKE '%LANSIA%'
+               OR UPPER(TRIM(COALESCE(a.komponen, ''))) LIKE '%DISABILITAS%'
+             )
+           ORDER BY a.no_kk, IF(COALESCE(a.entry_source, 'IMPORT') = 'IMPORT', 0, 1), a.nama, a.id`,
+          noKks
+        )
+      : [];
+    const importedByKkAndType = new Map<string, typeof artRows>();
+    const manualBySlot = new Map<string, (typeof artRows)[number]>();
+    for (const art of artRows) {
+      const componentType = art.healthComponentType ?? componentTypeFromArt(art.komponen);
+      if (!componentType) continue;
+      if (art.entrySource === "MANUAL" && art.healthKpmId && art.healthSlotNo) {
+        manualBySlot.set(`${art.healthKpmId}-${componentType}-${art.healthSlotNo}`, art);
+      } else {
+        const mapKey = `${art.noKk}-${componentType}`;
+        const current = importedByKkAndType.get(mapKey) ?? [];
+        current.push(art);
+        importedByKkAndType.set(mapKey, current);
+      }
+    }
+
+    return kpmRows.flatMap((kpm) => {
+      const definitions: { type: HealthComponentType; label: string; count: number }[] = [
+        { type: "HAMIL", label: "Ibu Hamil", count: Number(kpm.jumlahHamilFc) },
+        { type: "AUD", label: "Anak Usia Dini (AUD)", count: Number(kpm.jumlahAudFc) },
+        { type: "LANSIA", label: "Lansia", count: Number(kpm.jumlahLansiaFc) },
+        { type: "DISABILITAS", label: "Disabilitas", count: Number(kpm.jumlahDisabilitasFc) }
+      ];
+      return definitions.flatMap((definition) => {
+        const members = importedByKkAndType.get(`${kpm.noKk}-${definition.type}`) ?? [];
+        return Array.from({ length: definition.count }, (_, index) => {
+          const manual = manualBySlot.get(`${kpm.kpmId}-${definition.type}-${index + 1}`);
+          const member = manual ?? members[index];
+          const source = manual ? "ART_MANUAL" as const : member ? "ART" as const : "BELUM_LENGKAP" as const;
+          return {
+          key: member ? `art-${member.id}-${definition.type}` : `kpm-${kpm.kpmId}-${definition.type}-missing-${index + 1}`,
+          kpmId: Number(kpm.kpmId),
+          noKk: kpm.noKk,
+          pengurusNik: kpm.pengurusNik,
+          namaPengurus: kpm.namaPengurus,
+          componentType: definition.type,
+          componentLabel: definition.label,
+          lansiaNik: member?.nik ?? "",
+          namaLansia: member?.nama ?? "",
+          lansiaKe: index + 1,
+          jumlahLansiaFc: definition.count,
+          jumlahLansiaArt: members.length,
+          statusData: member ? "LENGKAP" as const : "BELUM_LENGKAP" as const,
+          sumberData: source,
+          alamatFc: kpm.alamatFc,
+          alamat: kpm.alamat,
+          rt: kpm.rt,
+          rw: kpm.rw,
+          desa: kpm.desa,
+          kecamatan: kpm.kecamatan,
+          pendamping: kpm.pendamping,
+          groupId: kpm.groupId ? Number(kpm.groupId) : null,
+          groupName: kpm.groupName ?? ""
+          };
+        });
+      });
+    });
+  } catch (error) {
+    console.error("Gagal membaca data lansia untuk verifikasi kesehatan", error);
+    return [];
+  }
+}
+
+export async function ensureHealthVisitVerificationTable() {
+  await query(`CREATE TABLE IF NOT EXISTS health_visit_verifications (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    kpm_id BIGINT NOT NULL,
+    elder_slot_no INT NOT NULL,
+    elder_nik VARCHAR(30) NOT NULL,
+    elder_name VARCHAR(180) NOT NULL,
+    no_kk VARCHAR(30) NOT NULL,
+    group_id BIGINT NULL,
+    group_name VARCHAR(160) NULL,
+    year SMALLINT NOT NULL,
+    month TINYINT NOT NULL,
+    visit_date DATE NOT NULL,
+    attendance_status ENUM('HADIR','TIDAK_HADIR') NOT NULL,
+    note VARCHAR(500) NULL,
+    verified_by BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_health_visit_month (kpm_id, elder_slot_no, year, month),
+    INDEX idx_health_visit_nik (elder_nik),
+    FOREIGN KEY (kpm_id) REFERENCES kpm_final_closing(id),
+    FOREIGN KEY (verified_by) REFERENCES users(id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8`);
+  await ensureHealthComponentColumns();
+}
+
+async function ensureHealthComponentColumns() {
+  try {
+    await query("ALTER TABLE art_members ADD COLUMN health_component_type VARCHAR(20) NULL AFTER health_slot_no");
+  } catch (error: any) {
+    if (error?.code !== "ER_DUP_FIELDNAME" && error?.errno !== 1060) throw error;
+  }
+  try {
+    await query("ALTER TABLE health_visit_verifications ADD COLUMN component_type VARCHAR(20) NOT NULL DEFAULT 'LANSIA' AFTER elder_slot_no");
+  } catch (error: any) {
+    if (error?.code !== "ER_DUP_FIELDNAME" && error?.errno !== 1060) throw error;
+  }
+  try {
+    await query("ALTER TABLE health_visit_verifications ADD UNIQUE KEY uniq_health_visit_component_month (kpm_id, component_type, elder_slot_no, year, month)");
+  } catch (error: any) {
+    if (error?.code !== "ER_DUP_KEYNAME" && error?.errno !== 1061) throw error;
+  }
+  try {
+    await query("ALTER TABLE health_visit_verifications ADD COLUMN photo_path VARCHAR(255) NULL AFTER note");
+  } catch (error: any) {
+    if (error?.code !== "ER_DUP_FIELDNAME" && error?.errno !== 1060) throw error;
+  }
+  try {
+    await query("ALTER TABLE health_visit_verifications DROP INDEX uniq_health_visit_month");
+  } catch (error: any) {
+    if (error?.code !== "ER_CANT_DROP_FIELD_OR_KEY" && error?.errno !== 1091) throw error;
+  }
+}
+
+function componentTypeFromArt(value: string): HealthComponentType | null {
+  const component = value.toUpperCase().trim();
+  if (component.includes("HAMIL")) return "HAMIL";
+  if (component === "USIA DINI" || component === "AUD") return "AUD";
+  if (component.includes("LANSIA")) return "LANSIA";
+  if (component.includes("DISABILITAS")) return "DISABILITAS";
+  return null;
 }
 
 export async function ensureSettingsTable() {
@@ -541,7 +749,11 @@ export async function ensureArtMembersExtraColumns() {
     ["kecamatan", "VARCHAR(120) NULL"],
     ["kabupaten", "VARCHAR(120) NULL"],
     ["status", "VARCHAR(120) NULL"],
-    ["periode", "VARCHAR(120) NULL"]
+    ["periode", "VARCHAR(120) NULL"],
+    ["entry_source", "VARCHAR(20) NOT NULL DEFAULT 'IMPORT'"],
+    ["health_kpm_id", "BIGINT NULL"],
+    ["health_slot_no", "INT NULL"],
+    ["health_component_type", "VARCHAR(20) NULL"]
   ];
   const existing = await query<{ COLUMN_NAME: string }>(
     `SELECT COLUMN_NAME
@@ -688,6 +900,80 @@ export async function getP2k2AttendanceRows(user: SessionUser) {
   }
 }
 
+export async function getP2k2ReportRecapRows(user: SessionUser) {
+  try {
+    await ensureP2k2GroupAreaColumns();
+    await ensureP2k2ReportTables();
+    const profile = user.role === "PENDAMPING" ? await getPendampingProfileForUser(user.id) : null;
+    const where = profile ? "WHERE r.pendamping_id = ?" : "";
+    const params = profile ? [profile.id] : [];
+    return await query<{
+      reportId: number;
+      groupId: number;
+      groupName: string;
+      pendampingId: number;
+      pendamping: string;
+      kecamatan: string;
+      year: number;
+      month: number;
+      meetingDate: string | null;
+      status: "DRAFT" | "TERKIRIM";
+      hadir: number;
+      tidakHadir: number;
+    }>(
+      `SELECT r.id AS reportId, r.group_id AS groupId, g.name AS groupName,
+              r.pendamping_id AS pendampingId, p.name AS pendamping,
+              COALESCE(gd.name, d.name, '') AS kecamatan,
+              r.year, r.month, DATE_FORMAT(r.meeting_date, '%Y-%m-%d') AS meetingDate,
+              r.status,
+              SUM(CASE WHEN a.attendance_status = 'HADIR' THEN 1 ELSE 0 END) AS hadir,
+              SUM(CASE WHEN a.attendance_status = 'TIDAK_HADIR' THEN 1 ELSE 0 END) AS tidakHadir
+       FROM p2k2_reports r
+       JOIN p2k2_groups g ON g.id = r.group_id
+       JOIN pendamping_profiles p ON p.id = r.pendamping_id
+       LEFT JOIN reg_districts d ON d.id = p.district_id
+       LEFT JOIN reg_districts gd ON gd.id = g.district_id
+       LEFT JOIN p2k2_report_attendance a ON a.report_id = r.id
+       ${where}
+       GROUP BY r.id, r.group_id, g.name, r.pendamping_id, p.name, gd.name, d.name, r.year, r.month, r.meeting_date, r.status
+       ORDER BY r.year DESC, r.month DESC, COALESCE(gd.name, d.name), p.name, g.name`,
+      params
+    );
+  } catch (error) {
+    console.error("Gagal membaca rekap laporan P2K2", error);
+    return [];
+  }
+}
+
+export async function getP2k2ActivePendampingRanking(year: number, month: number) {
+  try {
+    await ensureP2k2GroupAreaColumns();
+    await ensureP2k2ReportTables();
+    return await query<{
+      pendampingId: number;
+      userId: number | null;
+      pendamping: string;
+      kecamatan: string;
+      totalPertemuan: number;
+    }>(
+      `SELECT p.id AS pendampingId, p.user_id AS userId, p.name AS pendamping,
+              COALESCE(d.name, '') AS kecamatan,
+              COUNT(*) AS totalPertemuan
+       FROM p2k2_reports r
+       JOIN pendamping_profiles p ON p.id = r.pendamping_id
+       LEFT JOIN reg_districts d ON d.id = p.district_id
+       WHERE r.year = ? AND r.month = ? AND r.status = 'TERKIRIM'
+       GROUP BY p.id, p.user_id, p.name, d.name
+       ORDER BY totalPertemuan DESC, p.name ASC
+       LIMIT 20`,
+      [year, month]
+    );
+  } catch (error) {
+    console.error("Gagal membaca ranking pendamping P2K2", error);
+    return [];
+  }
+}
+
 export async function ensureRekonTables() {
   await query(`CREATE TABLE IF NOT EXISTS rekon_transactions (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -824,6 +1110,18 @@ export async function getUsersRows() {
 
 export async function getActivityLogs() {
   try {
+    await query(
+      `DELETE FROM activity_logs
+       WHERE id NOT IN (
+         SELECT id FROM (
+           SELECT id
+           FROM activity_logs
+           ORDER BY created_at DESC, id DESC
+           LIMIT 50
+         ) recent_logs
+       )`
+    );
+
     return await query<{ waktu: string; user: string; aksi: string; modul: string; deskripsi: string }>(
       `SELECT DATE_FORMAT(l.created_at, '%Y-%m-%d %H:%i') AS waktu,
               COALESCE(u.name, '-') AS user,
@@ -832,8 +1130,8 @@ export async function getActivityLogs() {
               COALESCE(l.description, '') AS deskripsi
        FROM activity_logs l
        LEFT JOIN users u ON u.id = l.user_id
-       ORDER BY l.created_at DESC
-       LIMIT 500`
+       ORDER BY l.created_at DESC, l.id DESC
+       LIMIT 50`
     );
   } catch (error) {
     console.error("Gagal membaca log aktivitas dari MySQL", error);
@@ -864,6 +1162,156 @@ export async function getOnlineUsers() {
     console.error("Gagal membaca user online", error);
     return [];
   }
+}
+
+export async function getAppNotifications(user: SessionUser, activePeriod: ActivePeriod): Promise<AppNotification[]> {
+  const notifications: AppNotification[] = [];
+  const currentMonth = jakartaMonth();
+  const monthLabel = monthName(currentMonth);
+
+  try {
+    if (user.role === "PENDAMPING" && user.districtId) {
+      const latestImports = await query<{ id: number; fileName: string; district: string; uploadedAt: string }>(
+        `SELECT b.id, b.file_name AS fileName, COALESCE(d.name, '-') AS district,
+                DATE_FORMAT(b.uploaded_at, '%d/%m/%Y %H:%i') AS uploadedAt
+         FROM import_batches b
+         LEFT JOIN reg_districts d ON d.id = b.district_id
+         WHERE b.type = 'FINAL_CLOSING'
+           AND b.district_id = ?
+           AND b.uploaded_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+         ORDER BY b.uploaded_at DESC
+         LIMIT 1`,
+        [user.districtId]
+      );
+      if (latestImports[0]) {
+        notifications.push({
+          id: `final-closing-import-${latestImports[0].id}`,
+          title: "Final Closing diperbarui",
+          description: `${latestImports[0].district} diperbarui pada ${latestImports[0].uploadedAt}.`,
+          href: "/final-closing",
+          tone: "info",
+          isNew: true
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Gagal membaca notifikasi import Final Closing", error);
+  }
+
+  try {
+    const healthRows = await getHealthVerificationElders(user);
+    const incompleteHealth = healthRows.filter((row) => row.statusData === "BELUM_LENGKAP").length;
+    if (incompleteHealth > 0) {
+      notifications.push({
+        id: "health-data-incomplete",
+        title: "Data komponen kesehatan belum lengkap",
+        description: `${incompleteHealth.toLocaleString("id-ID")} komponen perlu dilengkapi identitasnya.`,
+        href: "/verifikasi-kesehatan",
+        tone: "warning",
+        count: incompleteHealth
+      });
+    }
+
+    const completeHealth = healthRows.filter((row) => row.statusData === "LENGKAP");
+    await ensureHealthVisitVerificationTable();
+    const verified = await query<{ kpmId: number; slotNo: number; componentType: HealthComponentType }>(
+      `SELECT kpm_id AS kpmId, elder_slot_no AS slotNo, component_type AS componentType
+       FROM health_visit_verifications
+       WHERE year = ? AND month = ?`,
+      [activePeriod.year, currentMonth]
+    );
+    const verifiedKeys = new Set(verified.map((row) => `${row.kpmId}-${row.componentType}-${row.slotNo}`));
+    const unverifiedHealth = completeHealth.filter((row) => !verifiedKeys.has(`${row.kpmId}-${row.componentType}-${row.lansiaKe}`)).length;
+    if (unverifiedHealth > 0) {
+      notifications.push({
+        id: "health-unverified",
+        title: "Verifikasi kesehatan belum terisi",
+        description: `${unverifiedHealth.toLocaleString("id-ID")} komponen belum diverifikasi untuk ${monthLabel} ${activePeriod.year}.`,
+        href: "/verifikasi-kesehatan",
+        tone: "danger",
+        count: unverifiedHealth
+      });
+    }
+  } catch (error) {
+    console.error("Gagal membaca notifikasi verifikasi kesehatan", error);
+  }
+
+  try {
+    await ensureSuratArchivesTable();
+    const suratRows = await query<{ id: number; perihal: string; uploadedAt: string }>(
+      `SELECT id, perihal, DATE_FORMAT(created_at, '%d/%m/%Y %H:%i') AS uploadedAt
+       FROM surat_archives
+       WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+       ORDER BY created_at DESC, id DESC
+       LIMIT 3`
+    );
+    for (const surat of suratRows) {
+      notifications.push({
+        id: `new-surat-${surat.id}`,
+        title: "Surat baru diupload",
+        description: `${surat.perihal} - ${surat.uploadedAt}`,
+        href: "/surat",
+        tone: "info",
+        isNew: true
+      });
+    }
+  } catch (error) {
+    console.error("Gagal membaca notifikasi surat", error);
+  }
+
+  try {
+    const groups = (await getKelompokSummaries(user)).filter((group) => group.year === activePeriod.year && group.stage === activePeriod.stage && !group.archived);
+    const reports = await getP2k2Reports(user, activePeriod.year, currentMonth);
+    const submittedGroupIds = new Set(reports.filter((report) => report.status === "TERKIRIM").map((report) => Number(report.groupId)));
+    const missingReports = groups.filter((group) => !submittedGroupIds.has(group.id)).length;
+    if (missingReports > 0) {
+      notifications.push({
+        id: "p2k2-report-missing",
+        title: "Laporan P2K2 belum dikirim",
+        description: `${missingReports.toLocaleString("id-ID")} kelompok belum mengirim laporan ${monthLabel} ${activePeriod.year}.`,
+        href: "/laporan-p2k2",
+        tone: "warning",
+        count: missingReports
+      });
+    }
+  } catch (error) {
+    console.error("Gagal membaca notifikasi laporan P2K2", error);
+  }
+
+  try {
+    const rekonRows = await getRekonRows(user, activePeriod);
+    const belumTransaksi = rekonRows.filter((row) => row.status === "BELUM_TRANSAKSI").length;
+    if (belumTransaksi > 0) {
+      notifications.push({
+        id: "rekon-pending",
+        title: "Rekon belum transaksi",
+        description: `${belumTransaksi.toLocaleString("id-ID")} KPM belum transaksi pada tahap aktif.`,
+        href: "/rekon",
+        tone: "danger",
+        count: belumTransaksi
+      });
+    }
+  } catch (error) {
+    console.error("Gagal membaca notifikasi rekon", error);
+  }
+
+  const visibleNotifications = notifications.slice(0, 8);
+  try {
+    const readIds = await getReadNotificationIds(user.id, visibleNotifications.map((item) => item.id));
+    return visibleNotifications.map((item) => ({ ...item, isRead: readIds.has(item.id) }));
+  } catch (error) {
+    console.error("Gagal membaca status notifikasi", error);
+    return visibleNotifications;
+  }
+}
+
+function jakartaMonth() {
+  return Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jakarta", month: "numeric" }).format(new Date()));
+}
+
+function monthName(month: number) {
+  const names = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+  return names[month - 1] ?? `Bulan ${month}`;
 }
 
 export async function ensureSuratArchivesTable() {

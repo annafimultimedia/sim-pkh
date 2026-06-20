@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownUp, Download, FileText, Search } from "lucide-react";
+import { ArrowDownUp, Download, Search } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useEffect, useMemo, useState } from "react";
 import { MaskedNik } from "./masked-nik";
@@ -69,18 +69,6 @@ export function DataTable<T extends Record<string, unknown>>({
     XLSX.writeFile(wb, `${filename}.xlsx`);
   }
 
-  async function exportPdf() {
-    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
-    const doc = new jsPDF({ orientation: "landscape" });
-    doc.text(filename.toUpperCase(), 14, 12);
-    autoTable(doc, {
-      head: [columns.map((col) => typeof col.header === "string" ? col.header : String(col.key))],
-      body: filtered.map((row) => columns.map((col) => String(getValue(row, col)))),
-      styles: { fontSize: 7 }
-    });
-    doc.save(`${filename}.pdf`);
-  }
-
   return (
     <section className="rounded-2xl border border-border bg-white shadow-soft">
       <div className="flex flex-col gap-3 border-b border-border p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between">
@@ -96,7 +84,7 @@ export function DataTable<T extends Record<string, unknown>>({
             className="h-10 w-full rounded-lg border border-border pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
           />
         </div>
-        <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
           <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="h-10 min-w-0 rounded-lg border border-border bg-white px-2 text-sm sm:px-3">
             {[10, 25, 50, 100].map((size) => (
               <option key={size} value={size}>
@@ -107,9 +95,6 @@ export function DataTable<T extends Record<string, unknown>>({
           <button onClick={exportExcel} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-white px-2 text-sm font-medium hover:bg-muted sm:px-3">
             <Download className="h-4 w-4" /> Excel
           </button>
-          <button onClick={exportPdf} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-white px-2 text-sm font-medium hover:bg-muted sm:px-3">
-            <FileText className="h-4 w-4" /> PDF
-          </button>
         </div>
       </div>
       <div className="table-scroll overflow-auto">
@@ -118,10 +103,12 @@ export function DataTable<T extends Record<string, unknown>>({
             <tr>
               {columns.map((col) => (
                 <th key={String(col.key)} className={`whitespace-nowrap border-b border-border px-3 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-600 ${col.headerClassName ?? ""}`}>
-                  <button className="inline-flex items-center gap-1" onClick={() => toggleSort(String(col.key))}>
-                    {col.header}
-                    {typeof col.header === "string" && <ArrowDownUp className="h-3 w-3" />}
-                  </button>
+                  {typeof col.header === "string" ? (
+                    <button className="inline-flex items-center gap-1" onClick={() => toggleSort(String(col.key))}>
+                      {col.header}
+                      <ArrowDownUp className="h-3 w-3" />
+                    </button>
+                  ) : col.header}
                 </th>
               ))}
             </tr>

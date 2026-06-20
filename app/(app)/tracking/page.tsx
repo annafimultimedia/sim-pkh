@@ -2,9 +2,11 @@ import { PageHeader } from "@/components/app-shell";
 import { TrackingClient } from "@/components/tracking-client";
 import { getSession } from "@/lib/auth";
 import { getActivePeriod, getKpmForUser } from "@/lib/data";
+import { requireMenuAccess } from "@/lib/menu-access";
 
 export default async function TrackingPage() {
   const user = await getSession();
+  await requireMenuAccess(user, "tracking");
   const [rows, activePeriod] = await Promise.all([getKpmForUser(user), getActivePeriod()]);
 
   return (

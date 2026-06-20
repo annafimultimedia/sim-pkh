@@ -105,6 +105,56 @@ export type ActivePeriod = {
   stage: number;
 };
 
+export type HealthComponentType = "HAMIL" | "AUD" | "LANSIA" | "DISABILITAS";
+
+export type HealthVerificationElder = {
+  key: string;
+  kpmId: number;
+  noKk: string;
+  pengurusNik: string;
+  namaPengurus: string;
+  componentType: HealthComponentType;
+  componentLabel: string;
+  lansiaNik: string;
+  namaLansia: string;
+  lansiaKe: number;
+  jumlahLansiaFc: number;
+  jumlahLansiaArt: number;
+  statusData: "LENGKAP" | "BELUM_LENGKAP";
+  sumberData: "ART" | "ART_MANUAL" | "BELUM_LENGKAP";
+  alamatFc: string;
+  alamat: string;
+  rt: string;
+  rw: string;
+  desa: string;
+  kecamatan: string;
+  pendamping: string;
+  groupId: number | null;
+  groupName: string;
+};
+
+export type HealthVerificationRecord = {
+  id: number;
+  kpmId: number;
+  slotNo: number;
+  componentType: HealthComponentType;
+  componentLabel: string;
+  year: number;
+  month: number;
+  visitDate: string;
+  status: "HADIR" | "TIDAK_HADIR";
+  note: string;
+  photoPath?: string;
+  photoMonths?: string;
+  elderNik: string;
+  elderName: string;
+  noKk: string;
+  recipientName: string;
+  groupName: string;
+  verifiedBy: string;
+  updatedAt: string;
+};
+
 export type DeadlineTask = {
   id: number;
   title: string;
@@ -116,4 +166,15 @@ export type DeadlineTask = {
   completed: boolean;
   completedAt: string;
   createdBy: string;
+};
+
+export type AppNotification = {
+  id: string;
+  title: string;
+  description: string;
+  href: string;
+  tone: "info" | "warning" | "danger" | "success";
+  count?: number;
+  isNew?: boolean;
+  isRead?: boolean;
 };

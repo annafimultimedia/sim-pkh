@@ -215,7 +215,7 @@ export function RekonClient({ user, rows, activePeriod }: { user: SessionUser; r
       />
 
       {target ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setTarget(null)}>
+        <div className="fixed inset-0 z-[500] overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setTarget(null)}>
           <section className="mx-auto w-full max-w-lg rounded-2xl bg-white p-4 shadow-soft sm:p-5" onPointerDown={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>

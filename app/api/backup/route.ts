@@ -36,11 +36,15 @@ export async function POST(request: Request) {
 
   if (action === "settings") {
     const enabled = String(form.get("enabled") ?? "") === "1";
+    const rawFrequency = String(form.get("frequency") ?? "DAILY");
+    const frequency = rawFrequency === "WEEKLY" || rawFrequency === "MONTHLY" ? rawFrequency : "DAILY";
     const time = String(form.get("time") ?? "22:00");
+    const weekday = Math.max(1, Math.min(7, Number(form.get("weekday") ?? 1)));
+    const monthDay = Math.max(1, Math.min(28, Number(form.get("monthDay") ?? 1)));
     const keep = Math.max(1, Math.min(60, Number(form.get("keep") ?? 7)));
     const current = await getBackupSettings();
-    await saveBackupSettings({ ...current, enabled, time, keep });
-    await query("INSERT INTO activity_logs (user_id, action, entity, description) VALUES (?, 'UPDATE', 'backup_settings', ?)", [user.id, `Update jadwal backup ${enabled ? "aktif" : "nonaktif"} jam ${time}`]);
+    await saveBackupSettings({ ...current, enabled, frequency, time, weekday, monthDay, keep });
+    await query("INSERT INTO activity_logs (user_id, action, entity, description) VALUES (?, 'UPDATE', 'backup_settings', ?)", [user.id, `Update jadwal backup ${enabled ? "aktif" : "nonaktif"} ${frequency} jam ${time}`]);
     return NextResponse.json({ ok: true, settings: await getBackupSettings() });
   }
 

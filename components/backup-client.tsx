@@ -6,7 +6,10 @@ import { DataTable } from "./data-table";
 
 type BackupSettings = {
   enabled: boolean;
+  frequency: "DAILY" | "WEEKLY" | "MONTHLY";
   time: string;
+  weekday: number;
+  monthDay: number;
   keep: number;
   lastRun: string;
 };
@@ -55,7 +58,10 @@ export function BackupClient({ initialSettings, initialFiles }: { initialSetting
     const body = new FormData();
     body.append("action", "settings");
     body.append("enabled", settings.enabled ? "1" : "0");
+    body.append("frequency", settings.frequency);
     body.append("time", settings.time);
+    body.append("weekday", String(settings.weekday));
+    body.append("monthDay", String(settings.monthDay));
     body.append("keep", String(settings.keep));
     const res = await fetch("/api/backup", { method: "POST", body });
     const json = await readJson(res);
@@ -101,7 +107,7 @@ export function BackupClient({ initialSettings, initialFiles }: { initialSetting
         <div className="rounded-2xl border border-border bg-white p-5 shadow-soft">
           <h2 className="text-base font-bold">Backup Otomatis</h2>
           <p className="mt-1 text-sm text-muted-foreground">Sistem mengecek jadwal saat admin aktif membuka aplikasi.</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <label className="text-sm font-semibold">
               Status
               <select value={settings.enabled ? "1" : "0"} onChange={(event) => setSettings((current) => ({ ...current, enabled: event.target.value === "1" }))} className="mt-1 h-10 w-full rounded-lg border border-border bg-white px-3">
@@ -109,6 +115,28 @@ export function BackupClient({ initialSettings, initialFiles }: { initialSetting
                 <option value="0">Nonaktif</option>
               </select>
             </label>
+            <label className="text-sm font-semibold">
+              Frekuensi
+              <select value={settings.frequency} onChange={(event) => setSettings((current) => ({ ...current, frequency: event.target.value as BackupSettings["frequency"] }))} className="mt-1 h-10 w-full rounded-lg border border-border bg-white px-3">
+                <option value="DAILY">Harian</option>
+                <option value="WEEKLY">Mingguan</option>
+                <option value="MONTHLY">Bulanan</option>
+              </select>
+            </label>
+            {settings.frequency === "WEEKLY" ? (
+              <label className="text-sm font-semibold">
+                Hari
+                <select value={settings.weekday} onChange={(event) => setSettings((current) => ({ ...current, weekday: Number(event.target.value) }))} className="mt-1 h-10 w-full rounded-lg border border-border bg-white px-3">
+                  {weekdayOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+            ) : null}
+            {settings.frequency === "MONTHLY" ? (
+              <label className="text-sm font-semibold">
+                Tanggal
+                <input type="number" min={1} max={28} value={settings.monthDay} onChange={(event) => setSettings((current) => ({ ...current, monthDay: Number(event.target.value) }))} className="mt-1 h-10 w-full rounded-lg border border-border px-3" />
+              </label>
+            ) : null}
             <label className="text-sm font-semibold">
               Jam Backup
               <input type="time" value={settings.time} onChange={(event) => setSettings((current) => ({ ...current, time: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-border px-3" />
@@ -119,7 +147,7 @@ export function BackupClient({ initialSettings, initialFiles }: { initialSetting
             </label>
           </div>
           <div className="mt-4 flex items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">Terakhir otomatis: {settings.lastRun || "-"}</p>
+            <p className="text-xs text-muted-foreground">Terakhir otomatis: {settings.lastRun || "-"} - {scheduleLabel(settings)}</p>
             <button onClick={saveSettings} disabled={!!loading} className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:opacity-60">
               {loading === "settings" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Simpan Jadwal
             </button>
@@ -157,6 +185,26 @@ export function BackupClient({ initialSettings, initialFiles }: { initialSetting
       />
     </div>
   );
+}
+
+const weekdayOptions = [
+  { value: 1, label: "Senin" },
+  { value: 2, label: "Selasa" },
+  { value: 3, label: "Rabu" },
+  { value: 4, label: "Kamis" },
+  { value: 5, label: "Jumat" },
+  { value: 6, label: "Sabtu" },
+  { value: 7, label: "Minggu" }
+];
+
+function scheduleLabel(settings: BackupSettings) {
+  if (!settings.enabled) return "Jadwal nonaktif";
+  if (settings.frequency === "DAILY") return `Harian jam ${settings.time}`;
+  if (settings.frequency === "WEEKLY") {
+    const day = weekdayOptions.find((option) => option.value === Number(settings.weekday))?.label ?? "Senin";
+    return `Mingguan setiap ${day} jam ${settings.time}`;
+  }
+  return `Bulanan setiap tanggal ${settings.monthDay} jam ${settings.time}`;
 }
 
 async function readJson(response: Response) {

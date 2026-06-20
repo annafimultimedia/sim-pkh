@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/app-shell";
 import { DashboardClient } from "@/components/dashboard-client";
 import { getSession } from "@/lib/auth";
-import { buildDashboardData, getActivePeriod, getDeadlineTasks, getDistrictOptions, getKelompokSummaries, getKpmForUser, getOnlineUsers, getP2k2Reports, getPendampingProfileForUser, getRekonRows } from "@/lib/data";
+import { buildDashboardData, getActivePeriod, getDeadlineTasks, getDistrictOptions, getKelompokSummaries, getKpmForUser, getOnlineUsers, getP2k2ActivePendampingRanking, getP2k2Reports, getPendampingProfileForUser, getRekonRows } from "@/lib/data";
 
 export default async function DashboardPage() {
   const user = await getSession();
@@ -19,15 +19,18 @@ export default async function DashboardPage() {
   const kpmDampingan = profile ? activeRows.filter((row) => row.pendampingId === profile.id).length : activeData.mapped;
   const activeGroups = groups.filter((group) => group.year === activePeriod.year && group.stage === activePeriod.stage);
   const p2k2Reports = await getP2k2Reports(user, activePeriod.year, currentMonth);
+  const activePendampingP2k2 = await getP2k2ActivePendampingRanking(activePeriod.year, currentMonth);
   const rekonRows = await getRekonRows(user, activePeriod);
   const p2k2ReportedGroupIds = new Set(p2k2Reports.map((report) => Number(report.groupId)));
   const data = {
     ...activeData,
     mapped: user.role === "PENDAMPING" ? kpmDampingan : activeData.mapped,
-    mappedLabel: user.role === "PENDAMPING" ? "KPM Dampingan" : "KPM Termapping",
+    mappedLabel: "KPM Termapping",
     byStage: allData.byStage,
     groupCount: activeGroups.length,
     activePeriod,
+    activePendampingP2k2,
+    currentUserId: user.id,
     alerts: {
       p2k2Month: currentMonth,
       p2k2Terkirim: p2k2Reports.filter((report) => report.status === "TERKIRIM").length,

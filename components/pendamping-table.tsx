@@ -275,7 +275,7 @@ export function PendampingTable({
       />
 
       {editing && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
+        <div className="fixed inset-0 z-[500] grid place-items-center bg-slate-950/40 p-4">
           <section className="w-full max-w-xl rounded-2xl bg-white p-5 shadow-soft">
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -307,7 +307,7 @@ export function PendampingTable({
       )}
 
       {confirmMove && editing ? (
-        <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/40 p-4">
+        <div className="fixed inset-0 z-[510] grid place-items-center bg-slate-950/40 p-4">
           <section className="w-full max-w-md rounded-2xl bg-white p-5 shadow-soft">
             <h2 className="text-lg font-bold">Konfirmasi Pindah Tugas</h2>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -325,7 +325,7 @@ export function PendampingTable({
       ) : null}
 
       {errorModal ? (
-        <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/40 p-4">
+        <div className="fixed inset-0 z-[520] grid place-items-center bg-slate-950/40 p-4">
           <section className="w-full max-w-md rounded-2xl bg-white p-5 shadow-soft">
             <div className="flex items-start gap-3">
               <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-700">
@@ -344,7 +344,7 @@ export function PendampingTable({
       ) : null}
 
       {resetTarget && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
+        <div className="fixed inset-0 z-[500] grid place-items-center bg-slate-950/40 p-4">
           <section className="w-full max-w-md rounded-2xl bg-white p-5 shadow-soft">
             <div className="flex items-start gap-3">
               <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-700">
@@ -367,7 +367,7 @@ export function PendampingTable({
       )}
 
       {uploadModal.open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
+        <div className="fixed inset-0 z-[500] grid place-items-center bg-slate-950/40 p-4">
           <section className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-soft">
             <div className="flex items-start gap-3">
               <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${

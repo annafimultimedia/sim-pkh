@@ -7,7 +7,7 @@ export default async function SettingsPage() {
   const [activePeriod, user, appName] = await Promise.all([getActivePeriod(), getSession(), getAppName()]);
   return (
     <>
-      <PageHeader title="Pengaturan" description={user.role === "PENDAMPING" ? "Ubah nama pendamping dan password akun." : "Pengaturan periode aktif dan password akun."} />
+      <PageHeader title="Pengaturan" description={user.role === "PENDAMPING" ? "Ubah nama pendamping dan password akun." : "Pengaturan nama aplikasi, periode aktif, dan password akun."} />
       <SettingsClient activePeriod={activePeriod} appName={appName} user={user} />
     </>
   );

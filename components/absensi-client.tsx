@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { Download, FileText, Printer } from "lucide-react";
-import { MaskedNik } from "./masked-nik";
 import { ActivePeriod, GroupSummary, Kpm, Pendamping, SessionUser } from "@/lib/types";
 
 type GroupMeta = GroupSummary & {
@@ -154,34 +153,36 @@ export function AbsensiClient({ rows, groups, pendamping: pendampingList, user, 
             <table className="mt-3 w-full table-fixed border-collapse text-[9px] leading-[1.08]">
               <colgroup>
                 <col className="w-8" />
-                <col className="w-[20%]" />
+                <col className="w-[18%]" />
                 <col className="w-[14%]" />
                 <col />
                 <col className="w-8" />
                 <col className="w-8" />
-                <col className="w-[20%]" />
+                <col className="w-[15%]" />
+                <col className="w-[12%]" />
               </colgroup>
               <thead>
                 <tr className="bg-slate-100">
-                  {["No", "Nama", "NIK", "Alamat", "RT", "RW", "Tanda Tangan"].map((heading) => <th key={heading} className="whitespace-nowrap border border-slate-500 px-1 py-0.5 text-center font-bold">{heading}</th>)}
+                  {["No", "Nama", "NIK", "Alamat", "RT", "RW", "Tanda Tangan", "Ket"].map((heading) => <th key={heading} className="whitespace-nowrap border border-slate-500 px-1 py-0.5 text-center font-bold">{heading}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {members.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="border border-slate-500 p-4 text-center text-slate-500">Belum ada KPM di kelompok ini.</td>
+                    <td colSpan={8} className="border border-slate-500 p-4 text-center text-slate-500">Belum ada KPM di kelompok ini.</td>
                   </tr>
                 ) : members.map((row, index) => (
                   <tr key={`${row.id}-${row.nik}`}>
                     <td className="whitespace-nowrap border border-slate-500 px-1 py-0.5 text-center align-middle">{index + 1}</td>
                     <td className="truncate whitespace-nowrap border border-slate-500 px-1 py-0.5 align-middle font-semibold">{row.nama}</td>
-                    <td className="whitespace-nowrap border border-slate-500 px-1 py-0.5 align-middle"><MaskedNik nik={row.nik} className="min-w-0 text-[9px]" /></td>
-                    <td className="truncate whitespace-nowrap border border-slate-500 px-1 py-0.5 align-middle">{row.alamat}</td>
+                    <td className="whitespace-nowrap border border-slate-500 px-1 py-0.5 align-middle">{row.nik}</td>
+                    <td className="truncate whitespace-nowrap border border-slate-500 px-1 py-0.5 align-middle">{formatKpmAddress(row)}</td>
                     <td className="whitespace-nowrap border border-slate-500 px-1 py-0.5 text-center align-middle">{row.rt}</td>
                     <td className="whitespace-nowrap border border-slate-500 px-1 py-0.5 text-center align-middle">{row.rw}</td>
                     <td className="h-7 whitespace-nowrap border border-slate-500 px-1 py-0.5 align-top">
                       <span className={`block w-1/2 ${index % 2 === 0 ? "text-left" : "ml-auto text-left"}`}>{index + 1}.</span>
                     </td>
+                    <td className="whitespace-nowrap border border-slate-500 px-1 py-0.5 align-middle"></td>
                   </tr>
                 ))}
               </tbody>
@@ -226,6 +227,10 @@ function uniqueKpmByNik(rows: Kpm[]) {
     if (!map.has(row.nik)) map.set(row.nik, row);
   }
   return [...map.values()];
+}
+
+function formatKpmAddress(row: Kpm) {
+  return row.alamatFc || "-";
 }
 
 function sameText(left: string, right: string) {

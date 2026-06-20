@@ -1,5 +1,5 @@
 import mysql from "mysql2/promise";
-import type { QueryResult } from "mysql2";
+import type { Pool, QueryResult } from "mysql2/promise";
 
 const connectionLimit = Number(process.env.MYSQL_CONNECTION_LIMIT ?? 3);
 const mysqlHost = process.env.MYSQL_HOST ?? process.env.MYSQLHOST ?? "localhost";
@@ -13,7 +13,11 @@ const mysqlTarget = process.env.MYSQL_SOCKET_PATH
 
 console.info(`[mysql] target=${mysqlTarget} database=${mysqlDatabase} user=${mysqlUser} limit=${connectionLimit}`);
 
-export const pool = mysql.createPool({
+const globalForMysql = globalThis as typeof globalThis & {
+  simPkhMysqlPool?: Pool;
+};
+
+export const pool = globalForMysql.simPkhMysqlPool ?? mysql.createPool({
   ...(process.env.MYSQL_SOCKET_PATH
     ? { socketPath: process.env.MYSQL_SOCKET_PATH }
     : { host: mysqlHost }),
@@ -28,6 +32,10 @@ export const pool = mysql.createPool({
   enableKeepAlive: true,
   keepAliveInitialDelay: 10_000
 });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForMysql.simPkhMysqlPool = pool;
+}
 
 export async function query<T>(sql: string, params: (string | number | boolean | Date | null)[] = []) {
   const [rows] = await executeWithRetry(sql, params);

@@ -1,12 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Loader2, MapPin, X } from "lucide-react";
+import { Check, CheckCircle2, Layers3, Loader2, MapPin, PieChart, Users, X } from "lucide-react";
 import { DataTable } from "./data-table";
 import { MaskedNik } from "./masked-nik";
 import { ActivePeriod, DistrictOption, Kpm, Pendamping, SessionUser, VillageOption } from "@/lib/types";
 
-export function FinalClosingClient({ rows, pendamping, user, districts, villages, activePeriod }: { rows: Kpm[]; pendamping: Pendamping[]; user: SessionUser; districts: DistrictOption[]; villages: VillageOption[]; activePeriod: ActivePeriod }) {
+type ImportLog = {
+  id: number;
+  jenis: string;
+  tahun: number;
+  tahap: number;
+  kecamatan: string;
+  file: string;
+  jumlahData: number;
+  diuploadOleh: string;
+  waktu: string;
+};
+
+export function FinalClosingClient({ rows, pendamping, user, districts, villages, activePeriod, importLogs }: { rows: Kpm[]; pendamping: Pendamping[]; user: SessionUser; districts: DistrictOption[]; villages: VillageOption[]; activePeriod: ActivePeriod; importLogs: ImportLog[] }) {
   const assignedDistrictName = districts.find((district) => district.id === user.districtId)?.name || user.district || "";
   const [selected, setSelected] = useState<number[]>([]);
   const [visibleRows, setVisibleRows] = useState<Kpm[]>([]);
@@ -85,6 +97,41 @@ export function FinalClosingClient({ rows, pendamping, user, districts, villages
       );
     });
   }, [currentPendampingProfile, desa, kabupaten, kecamatan, localRows, mappingStatus, onlyMyMapped, pendampingFilter, status, tahap, tahun, user]);
+  const summary = useMemo(() => {
+    const totalKpm = filtered.length;
+    const dampingCount = user.role === "PENDAMPING"
+      ? filtered.filter((row) => isMappedToCurrentPendamping(row, currentPendampingProfile, user)).length
+      : filtered.filter((row) => !!row.pendamping).length;
+    const unmappedCount = filtered.filter((row) => !row.pendamping).length;
+    const statusMap = new Map<string, number>();
+    for (const row of filtered) {
+      const key = row.status?.trim() || "Tanpa Status";
+      statusMap.set(key, (statusMap.get(key) ?? 0) + 1);
+    }
+    const statusRows = [...statusMap.entries()]
+      .map(([name, total]) => ({ name, total, percent: totalKpm ? Math.round((total / totalKpm) * 100) : 0 }))
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+    return {
+      totalKpm,
+      dampingCount,
+      unmappedCount,
+      statusRows,
+      topStatus: statusRows[0]
+    };
+  }, [currentPendampingProfile, filtered, user]);
+  const latestImport = useMemo(() => {
+    if (user.role === "ADMIN" && kecamatan === "SEMUA") return null;
+    const selectedYear = Number(tahun);
+    const selectedStage = tahap === "SEMUA" ? null : Number(tahap);
+    const finalClosingLogs = importLogs
+      .filter((log) => log.jenis === "FINAL_CLOSING" && log.tahun === selectedYear)
+      .sort((a, b) => b.waktu.localeCompare(a.waktu));
+    return finalClosingLogs.find((log) => {
+      const inStage = selectedStage === null || log.tahap === selectedStage;
+      const inDistrict = kecamatan !== "SEMUA" && sameText(log.kecamatan, kecamatan);
+      return inStage && inDistrict;
+    }) ?? null;
+  }, [importLogs, kecamatan, tahap, tahun, user.role]);
 
   useEffect(() => {
     if (status !== "SEMUA" && !statusOptions.some((item) => sameText(item, status))) {
@@ -193,6 +240,50 @@ export function FinalClosingClient({ rows, pendamping, user, districts, villages
 
   return (
     <div className="space-y-4">
+      <p className="-mt-2 text-sm text-muted-foreground">
+        <span className="font-semibold text-slate-700">Data Diperbarui</span>{" "}
+        {latestImport?.waktu ?? "-"}
+      </p>
+      <section className="grid gap-3 md:grid-cols-3">
+        <SummaryCard label="Jumlah KPM" value={summary.totalKpm} icon={Users} tone="emerald" />
+        <SummaryCard label="Jumlah Dampingan" value={summary.dampingCount} icon={CheckCircle2} tone="sky" />
+        <SummaryCard label="Belum Termapping" value={summary.unmappedCount} icon={Layers3} tone="rose" />
+      </section>
+      <section className="rounded-2xl border border-border bg-white p-4 shadow-soft">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-700">
+              <PieChart className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase text-muted-foreground">Rekap Status</p>
+              <h2 className="mt-1 text-base font-bold text-slate-900">
+                {summary.topStatus ? `Terbanyak: ${summary.topStatus.name}` : "Belum ada data"}
+              </h2>
+            </div>
+          </div>
+          {summary.topStatus ? (
+            <span className="w-fit rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary">
+              {summary.topStatus.total.toLocaleString("id-ID")} KPM
+            </span>
+          ) : null}
+        </div>
+        <div className="mt-4 flex max-h-36 flex-wrap gap-2 overflow-y-auto pr-1">
+          {summary.statusRows.length ? summary.statusRows.map((item) => (
+            <div key={item.name} className="min-w-48 flex-1 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100 sm:max-w-xs">
+              <div className="flex items-center justify-between gap-3">
+                <span className="min-w-0 truncate text-sm font-semibold text-slate-800">{item.name}</span>
+                <span className="shrink-0 text-xs font-bold text-slate-600">{item.total.toLocaleString("id-ID")}</span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${item.percent}%` }} />
+              </div>
+            </div>
+          )) : (
+            <p className="w-full rounded-xl border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">Tidak ada status pada filter ini.</p>
+          )}
+        </div>
+      </section>
       <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-white p-3 shadow-soft sm:p-4 [&>label]:w-full [&>label]:sm:w-auto [&_select]:w-full">
         <label className="text-sm font-medium">
           Kabupaten
@@ -290,7 +381,7 @@ export function FinalClosingClient({ rows, pendamping, user, districts, villages
         onVisibleRowsChange={handleVisibleRowsChange}
       />
       {modal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setModal(false)}>
+        <div className="fixed inset-0 z-[500] overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setModal(false)}>
           <div className="mx-auto flex max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-soft sm:max-h-[calc(100dvh-2rem)]" onPointerDown={(event) => event.stopPropagation()}>
             <div className="flex shrink-0 items-center justify-between border-b border-border p-4 sm:p-5">
               <div>
@@ -328,7 +419,7 @@ export function FinalClosingClient({ rows, pendamping, user, districts, villages
         </div>
       )}
       {confirmMapping && (
-        <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/40 p-4" onPointerDown={() => setConfirmMapping(null)}>
+        <div className="fixed inset-0 z-[510] grid place-items-center bg-slate-950/40 p-4" onPointerDown={() => setConfirmMapping(null)}>
           <section className="w-full max-w-md rounded-2xl bg-white p-5 shadow-soft" onPointerDown={(event) => event.stopPropagation()}>
             <h2 className="text-lg font-bold">Konfirmasi Mapping KPM</h2>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -348,7 +439,7 @@ export function FinalClosingClient({ rows, pendamping, user, districts, villages
         </div>
       )}
       {artModal ? (
-        <div className="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setArtModal(null)}>
+        <div className="fixed inset-0 z-[520] overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setArtModal(null)}>
           <section className="mx-auto flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-soft sm:max-h-[calc(100dvh-2rem)]" onPointerDown={(event) => event.stopPropagation()}>
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-4 sm:p-5">
               <div>
@@ -417,4 +508,21 @@ function sameText(left: string, right: string) {
 
 function uniqueSorted(values: string[]) {
   return [...new Set(values.map((value) => value?.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function SummaryCard({ label, value, icon: Icon, tone }: { label: string; value: number; icon: any; tone: "emerald" | "sky" | "rose" }) {
+  const colors = {
+    emerald: "bg-emerald-50 text-emerald-700",
+    sky: "bg-sky-50 text-sky-700",
+    rose: "bg-rose-50 text-rose-700"
+  };
+  return (
+    <div className="rounded-2xl border border-border bg-white p-4 shadow-soft">
+      <div className={`grid h-10 w-10 place-items-center rounded-xl ${colors[tone]}`}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <p className="mt-3 text-xs font-bold uppercase text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-bold tracking-tight text-slate-900">{value.toLocaleString("id-ID")}</p>
+    </div>
+  );
 }

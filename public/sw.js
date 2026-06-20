@@ -1,5 +1,5 @@
-const CACHE_NAME = "sim-pkh-static-v1";
-const STATIC_ASSETS = ["/icon.svg"];
+const CACHE_NAME = "sim-pkh-static-v2";
+const STATIC_ASSETS = ["/icon-1024.png", "/favicon.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -40,5 +40,5 @@ self.addEventListener("fetch", (event) => {
 });
 
 function isStaticAsset(pathname) {
-  return pathname.startsWith("/_next/static/") || pathname === "/icon.svg";
+  return pathname.startsWith("/_next/static/") || pathname === "/icon-1024.png" || pathname === "/favicon.png";
 }

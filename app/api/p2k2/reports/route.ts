@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ensureP2k2ReportTables, getPendampingProfileForUser } from "@/lib/data";
 import { pool, query } from "@/lib/db";
+import { deletePublicUpload } from "@/lib/upload-files";
 
 const maxPhotoSize = 500 * 1024;
 const maxPdfSize = 1024 * 1024;
@@ -151,8 +152,8 @@ export async function DELETE(request: Request) {
   const access = await canAccessGroup(user.id, user.role, groupId);
   if (!access.allowed) return NextResponse.json({ message: "Kelompok tidak ditemukan atau bukan akses Anda" }, { status: 404 });
 
-  const reports = await query<{ id: number }>(
-    "SELECT id FROM p2k2_reports WHERE group_id = ? AND year = ? AND month = ? LIMIT 1",
+  const reports = await query<{ id: number; photo_path: string | null; pdf_path: string | null }>(
+    "SELECT id, photo_path, pdf_path FROM p2k2_reports WHERE group_id = ? AND year = ? AND month = ? LIMIT 1",
     [groupId, year, month]
   );
   const report = reports[0];
@@ -169,6 +170,10 @@ export async function DELETE(request: Request) {
       `Hapus laporan P2K2 group ${groupId} ${year}-${month}`
     ]);
     await connection.commit();
+    await Promise.all([
+      deletePublicUpload(report.photo_path, "uploads/p2k2/"),
+      deletePublicUpload(report.pdf_path, "uploads/p2k2/")
+    ]);
     return NextResponse.json({ ok: true, id: report.id });
   } catch (error) {
     await connection.rollback();

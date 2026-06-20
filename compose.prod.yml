@@ -1,0 +1,33 @@
+services:
+  app:
+    image: ${IMAGE:-ghcr.io/OWNER/sim-pkh:latest}
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - uploads:/app/public/uploads
+      - app_storage:/app/storage
+
+  database:
+    image: mariadb:11.4
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    volumes:
+      - database_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  uploads:
+  app_storage:
+  database_data:
+

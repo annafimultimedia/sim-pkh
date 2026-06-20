@@ -1,8 +1,10 @@
 import type { MetadataRoute } from "next";
+import { getAppName } from "@/lib/data";
 
-export default function manifest(): MetadataRoute.Manifest {
+export default async function manifest(): Promise<MetadataRoute.Manifest> {
+  const appName = await getAppName();
   return {
-    name: "SIM-PKH Kabupaten",
+    name: appName,
     short_name: "SIM-PKH",
     description: "Sistem Informasi Manajemen PKH",
     start_url: "/dashboard",
@@ -13,9 +15,15 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "portrait",
     icons: [
       {
-        src: "/icon.svg",
-        sizes: "64x64",
-        type: "image/svg+xml",
+        src: "/icon-1024.png",
+        sizes: "1024x1024",
+        type: "image/png",
+        purpose: "any"
+      },
+      {
+        src: "/icon-1024.png",
+        sizes: "1024x1024",
+        type: "image/png",
         purpose: "maskable"
       }
     ]

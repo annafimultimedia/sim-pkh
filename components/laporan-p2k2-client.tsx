@@ -89,6 +89,7 @@ export function LaporanP2k2Client({
   const [kecamatanFilter, setKecamatanFilter] = useState("SEMUA");
   const [pendampingFilter, setPendampingFilter] = useState("SEMUA");
   const [showArchived, setShowArchived] = useState(false);
+  const [groupPage, setGroupPage] = useState(1);
   const [groupId, setGroupId] = useState(0);
   const [formModal, setFormModal] = useState(false);
   const [meetingDate, setMeetingDate] = useState("");
@@ -107,6 +108,8 @@ export function LaporanP2k2Client({
   const [existingPdf, setExistingPdf] = useState("");
   const [reports, setReports] = useState(initialReports);
   const [preview, setPreview] = useState<{ type: "image" | "pdf"; url: string; title: string } | null>(null);
+  const [saveError, setSaveError] = useState<{ title: string; message: string } | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<{ title: string; message: string } | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loadingReport, setLoadingReport] = useState(false);
@@ -138,6 +141,11 @@ export function LaporanP2k2Client({
     const inPendamping = user.role !== "ADMIN" || pendampingFilter === "SEMUA" || sameText(group.pendamping, pendampingFilter);
     return inKecamatan && inPendamping;
   }), [groups, kecamatanFilter, pendampingFilter, showArchived, user.role]);
+  const groupPageSize = 10;
+  const groupPageCount = user.role === "ADMIN" ? Math.max(1, Math.ceil(filteredGroups.length / groupPageSize)) : 1;
+  const displayedGroups = user.role === "ADMIN"
+    ? filteredGroups.slice((groupPage - 1) * groupPageSize, groupPage * groupPageSize)
+    : filteredGroups;
   const currentGroup = filteredGroups.find((group) => group.id === groupId) ?? filteredGroups[0];
   const activeKpm = useMemo(() => uniqueKpmByNik(kpm.filter((row) => row.tahun === activePeriod.year && row.tahap === activePeriod.stage)), [activePeriod.stage, activePeriod.year, kpm]);
   const members = useMemo(() => {
@@ -149,9 +157,9 @@ export function LaporanP2k2Client({
   const currentSessions = p2k2Materials.find((item) => item.module === moduleName)?.sessions ?? [];
   const monthReports = reports.filter((report) => report.year === Number(year) && report.month === Number(month));
   const visibleMonthReports = monthReports.filter((report) => filteredGroups.some((group) => group.id === report.groupId));
+  const reportByGroupId = useMemo(() => new Map(visibleMonthReports.map((report) => [report.groupId, report])), [visibleMonthReports]);
   const draftCount = visibleMonthReports.filter((report) => report.status === "DRAFT").length;
   const sentCount = visibleMonthReports.filter((report) => report.status === "TERKIRIM").length;
-  const groupsWithoutReport = filteredGroups.filter((group) => !visibleMonthReports.some((report) => report.groupId === group.id));
 
   useEffect(() => {
     setPresentIds(members.map((member) => member.id));
@@ -175,6 +183,14 @@ export function LaporanP2k2Client({
       setGroupId(0);
     }
   }, [filteredGroups, groupId]);
+
+  useEffect(() => {
+    setGroupPage(1);
+  }, [kecamatanFilter, pendampingFilter, showArchived]);
+
+  useEffect(() => {
+    if (groupPage > groupPageCount) setGroupPage(groupPageCount);
+  }, [groupPage, groupPageCount]);
 
   useEffect(() => {
     async function loadReport() {
@@ -254,9 +270,19 @@ export function LaporanP2k2Client({
 
   async function save(status: "DRAFT" | "TERKIRIM") {
     setConfirmSave(null);
-    setSaving(true);
     setError("");
+    setSaveError(null);
+    setSaveSuccess(null);
     setMessage("");
+    if (!meetingDate || !moduleName || !sessionName) {
+      showSaveError(status, "Tanggal, materi, dan sesi wajib diisi");
+      return;
+    }
+    if (!members.length) {
+      showSaveError(status, "Daftar kehadiran tidak boleh kosong");
+      return;
+    }
+    setSaving(true);
     const body = new FormData();
     body.append("groupId", String(groupId));
     body.append("year", year);
@@ -279,7 +305,8 @@ export function LaporanP2k2Client({
     const json = await readJson(res);
     setSaving(false);
     if (!res.ok) {
-      setError(json.message ?? "Gagal menyimpan laporan");
+      const message = json.message ?? "Gagal menyimpan laporan";
+      showSaveError(status, message);
       return;
     }
     const nextReport: ReportSummary = {
@@ -306,7 +333,18 @@ export function LaporanP2k2Client({
     setExistingPhoto(nextReport.photoPath ?? "");
     setExistingPdf(nextReport.pdfPath ?? "");
     setDetailAttendance(members.map((member) => ({ kpmId: member.id, status: presentIds.includes(member.id) ? "HADIR" : "TIDAK_HADIR", note: attendanceNotes[member.id] ?? "" })));
-    setMessage(status === "TERKIRIM" ? "Laporan berhasil dikirim." : "Draft laporan berhasil disimpan.");
+    setFormModal(false);
+    setSaveSuccess({
+      title: status === "TERKIRIM" ? "Laporan Terkirim" : "Draft Tersimpan",
+      message: status === "TERKIRIM" ? "Laporan berhasil dikirim." : "Draft laporan berhasil disimpan."
+    });
+  }
+
+  function showSaveError(status: "DRAFT" | "TERKIRIM", message: string) {
+    setSaveError({
+      title: status === "TERKIRIM" ? "Laporan Gagal Dikirim" : "Draft Gagal Disimpan",
+      message
+    });
   }
 
   async function openDetail(report: ReportSummary) {
@@ -400,29 +438,60 @@ export function LaporanP2k2Client({
       <section className="rounded-2xl border border-border bg-white p-4 shadow-soft sm:p-5">
         <div className="mb-4">
           <h2 className="text-lg font-bold">Pilih Kelompok</h2>
-          <p className="text-sm text-muted-foreground">Pilih kelompok terlebih dahulu untuk membuka form laporan P2K2.</p>
+          <p className="text-sm text-muted-foreground">Status laporan dan aksi pengisian ditampilkan langsung pada tiap kelompok.</p>
         </div>
 
         <div className="grid gap-2">
-          {groupsWithoutReport.map((group) => {
+          {displayedGroups.map((group) => {
+            const report = reportByGroupId.get(group.id);
             return (
-              <div key={group.id} className="grid gap-2 rounded-xl border border-border p-3 text-sm md:grid-cols-[minmax(0,1fr)_120px] md:items-center">
+              <div key={group.id} className="grid gap-3 rounded-xl border border-border p-3 text-sm lg:grid-cols-[minmax(0,1fr)_120px_150px_minmax(260px,auto)] lg:items-center">
                 <div>
                   <p className="font-bold">{group.name}</p>
                   <p className="text-xs text-muted-foreground">{group.pendamping} - {group.kecamatan} - {group.memberCount} KPM{group.archived ? " - Arsip" : ""}</p>
                 </div>
-                <button onClick={() => openForm(group)} className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white">
-                  Isi Laporan
-                </button>
+                <span className={`w-fit rounded-full px-2 py-1 text-xs font-bold ${report?.status === "TERKIRIM" ? "bg-emerald-50 text-emerald-700" : report?.status === "DRAFT" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"}`}>
+                  {report?.status ?? "BELUM DIBUAT"}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {report ? (
+                    <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> {report.hadir} hadir, {report.tidakHadir} tidak</span>
+                  ) : "Belum ada isian"}
+                </span>
+                <div className="grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
+                  {report ? (
+                    <>
+                      <button onClick={() => openDetail(report)} className="rounded-lg bg-primary/10 px-3 py-2 text-xs font-bold text-primary">Lihat Hasil</button>
+                      <button onClick={() => openForm(group)} className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white">Edit</button>
+                      <button onClick={() => setConfirmDelete(report)} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">Hapus</button>
+                    </>
+                  ) : (
+                    <button onClick={() => openForm(group)} className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white">
+                      Isi Laporan
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
-          {!groupsWithoutReport.length ? <p className="rounded-xl border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">Semua kelompok sudah memiliki laporan bulan ini.</p> : null}
+          {!filteredGroups.length ? <p className="rounded-xl border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">Tidak ada kelompok sesuai filter.</p> : null}
         </div>
+        {user.role === "ADMIN" && filteredGroups.length > 0 ? (
+          <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-muted-foreground">
+              Menampilkan {((groupPage - 1) * groupPageSize) + 1}-{Math.min(groupPage * groupPageSize, filteredGroups.length)} dari {filteredGroups.length} kelompok
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button type="button" disabled={groupPage <= 1} onClick={() => setGroupPage((current) => Math.max(1, current - 1))} className="h-9 rounded-lg border border-border bg-white px-3 text-xs font-semibold disabled:opacity-40">Sebelumnya</button>
+              <span className="min-w-14 text-center text-xs font-bold">{groupPage} / {groupPageCount}</span>
+              <button type="button" disabled={groupPage >= groupPageCount} onClick={() => setGroupPage((current) => Math.min(groupPageCount, current + 1))} className="h-9 rounded-lg border border-border bg-white px-3 text-xs font-semibold disabled:opacity-40">Berikutnya</button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {formModal ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-3 sm:p-4" onPointerDown={() => setFormModal(false)}>
+        <div className="fixed inset-0 z-[500] overflow-y-auto bg-slate-950/40 p-3 sm:p-4" onPointerDown={() => setFormModal(false)}>
           <section className="mx-auto flex max-h-[calc(100dvh-1.5rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-soft sm:max-h-[calc(100dvh-2rem)]" onPointerDown={(event) => event.stopPropagation()}>
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-4 sm:p-5">
               <div>
@@ -504,7 +573,7 @@ export function LaporanP2k2Client({
                         <td className="border-b border-border px-3 py-2">{index + 1}</td>
                         <td className="border-b border-border px-3 py-2 font-semibold">{member.nama}</td>
                         <td className="border-b border-border px-3 py-2"><MaskedNik nik={member.nik} /></td>
-                        <td className="border-b border-border px-3 py-2">{member.alamat}</td>
+                        <td className="border-b border-border px-3 py-2">{formatKpmAddress(member)}</td>
                         <td className="border-b border-border px-3 py-2">
                           <input
                             value={attendanceNotes[member.id] ?? ""}
@@ -539,37 +608,8 @@ export function LaporanP2k2Client({
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-border bg-white p-5 shadow-soft">
-        <h2 className="mb-3 text-lg font-bold">Rekap Laporan Bulan Ini</h2>
-        <div className="grid gap-2">
-          {filteredGroups.map((group) => {
-            const report = visibleMonthReports.find((item) => item.groupId === group.id);
-            return (
-              <div key={group.id} className="grid gap-2 rounded-xl border border-border p-3 text-sm md:grid-cols-[minmax(0,1fr)_110px_105px_minmax(210px,auto)] md:items-center">
-                <div>
-                  <p className="font-bold">{group.name}</p>
-                  <p className="text-xs text-muted-foreground">{group.kecamatan} - {group.memberCount} KPM{group.archived ? " - Arsip" : ""}</p>
-                </div>
-                <span className={`w-fit rounded-full px-2 py-1 text-xs font-bold ${report?.status === "TERKIRIM" ? "bg-emerald-50 text-emerald-700" : report?.status === "DRAFT" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"}`}>
-                  {report?.status ?? "BELUM DIBUAT"}
-                </span>
-                <span>{report?.meetingDate ?? "-"}</span>
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><CheckCircle2 className="h-3.5 w-3.5" /> {report ? `${report.hadir} hadir, ${report.tidakHadir} tidak` : "-"}</span>
-                  <span className="flex shrink-0 flex-wrap justify-end gap-2">
-                    {report ? <button onClick={() => openDetail(report)} className="rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary">Lihat</button> : null}
-                    {report ? <button onClick={() => openForm(group)} className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-white">Edit</button> : null}
-                    {report ? <button onClick={() => setConfirmDelete(report)} className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-50">Hapus</button> : null}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
       {confirmSave ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setConfirmSave(null)}>
+        <div className="fixed inset-0 z-[510] overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setConfirmSave(null)}>
           <section className="mx-auto w-full max-w-md rounded-2xl bg-white p-4 shadow-soft sm:p-5" onPointerDown={(event) => event.stopPropagation()}>
             <h2 className="text-lg font-bold">Konfirmasi Laporan</h2>
             <p className="mt-3 text-sm text-muted-foreground">
@@ -588,11 +628,14 @@ export function LaporanP2k2Client({
       ) : null}
 
       {confirmDelete ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setConfirmDelete(null)}>
+        <div className="fixed inset-0 z-[510] overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setConfirmDelete(null)}>
           <section className="mx-auto w-full max-w-md rounded-2xl bg-white p-4 shadow-soft sm:p-5" onPointerDown={(event) => event.stopPropagation()}>
             <h2 className="text-lg font-bold">Hapus Laporan</h2>
             <p className="mt-3 text-sm text-muted-foreground">
-              Hapus laporan <span className="font-bold text-slate-900">{confirmDelete.groupName}</span> bulan {months[confirmDelete.month - 1]} {confirmDelete.year}? Kelompok ini akan muncul lagi di Pilih Kelompok.
+              Hapus laporan kelompok <span className="font-bold text-slate-900">{confirmDelete.groupName}</span> bulan {months[confirmDelete.month - 1]} {confirmDelete.year}? Kelompok ini akan muncul lagi di Pilih Kelompok.
+            </p>
+            <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+              Peringatan: foto kegiatan dan PDF absensi yang tersimpan pada laporan ini juga akan dihapus permanen.
             </p>
             <div className="mt-5 grid gap-2 sm:flex sm:justify-end">
               <button disabled={deleting} onClick={() => setConfirmDelete(null)} className="h-10 rounded-lg border border-border px-4 text-sm font-semibold disabled:opacity-60">Batal</button>
@@ -605,7 +648,7 @@ export function LaporanP2k2Client({
       ) : null}
 
       {detailReport ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setDetailReport(null)}>
+        <div className="fixed inset-0 z-[500] overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setDetailReport(null)}>
           <section className="mx-auto max-h-[calc(100dvh-1.5rem)] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-4 shadow-soft sm:max-h-[calc(100dvh-2rem)] sm:p-5" onPointerDown={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -675,7 +718,7 @@ export function LaporanP2k2Client({
       ) : null}
 
       {preview ? (
-        <div className="fixed inset-0 z-[60] bg-slate-950/80 p-3 sm:p-5" onPointerDown={() => setPreview(null)}>
+        <div className="fixed inset-0 z-[520] bg-slate-950/80 p-3 sm:p-5" onPointerDown={() => setPreview(null)}>
           <section className="mx-auto flex h-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-soft" onPointerDown={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
               <h2 className="text-base font-bold text-slate-900">{preview.title}</h2>
@@ -691,6 +734,54 @@ export function LaporanP2k2Client({
               ) : (
                 <iframe src={preview.url} title={preview.title} className="h-full w-full rounded-lg border border-border bg-white" />
               )}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {saveError ? (
+        <div className="fixed inset-0 z-[530] overflow-y-auto bg-slate-950/50 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setSaveError(null)}>
+          <section className="mx-auto w-full max-w-lg rounded-2xl bg-white p-4 shadow-soft sm:p-5" onPointerDown={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase text-rose-600">Terjadi Kesalahan</p>
+                <h2 className="mt-1 text-lg font-bold text-slate-900">{saveError.title}</h2>
+              </div>
+              <button onClick={() => setSaveError(null)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg hover:bg-muted" aria-label="Tutup pesan error">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="mt-4 whitespace-pre-wrap rounded-xl bg-rose-50 px-3 py-3 text-sm font-semibold leading-6 text-rose-700">
+              {saveError.message}
+            </p>
+            <div className="mt-5 flex justify-end">
+              <button onClick={() => setSaveError(null)} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white">
+                Tutup
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {saveSuccess ? (
+        <div className="fixed inset-0 z-[530] overflow-y-auto bg-slate-950/50 p-3 sm:grid sm:place-items-center sm:p-4" onPointerDown={() => setSaveSuccess(null)}>
+          <section className="mx-auto w-full max-w-lg rounded-2xl bg-white p-4 shadow-soft sm:p-5" onPointerDown={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase text-emerald-600">Berhasil</p>
+                <h2 className="mt-1 text-lg font-bold text-slate-900">{saveSuccess.title}</h2>
+              </div>
+              <button onClick={() => setSaveSuccess(null)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg hover:bg-muted" aria-label="Tutup pesan berhasil">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="mt-4 rounded-xl bg-emerald-50 px-3 py-3 text-sm font-semibold leading-6 text-emerald-700">
+              {saveSuccess.message}
+            </p>
+            <div className="mt-5 flex justify-end">
+              <button onClick={() => setSaveSuccess(null)} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white">
+                Tutup
+              </button>
             </div>
           </section>
         </div>
@@ -743,6 +834,10 @@ function uniqueSorted(values: string[]) {
 
 function sameText(left: string, right: string) {
   return left.trim().toUpperCase() === right.trim().toUpperCase();
+}
+
+function formatKpmAddress(row: Kpm) {
+  return [row.alamatFc, row.rt && `RT ${row.rt}`, row.rw && `RW ${row.rw}`].filter(Boolean).join(", ") || "-";
 }
 
 function uniqueKpmByNik(rows: Kpm[]) {

@@ -3,7 +3,7 @@
 import { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Layers3, Plus, RefreshCw, Trash2, UserCheck, UserX, X } from "lucide-react";
+import { Layers3, Loader2, Plus, RefreshCw, Trash2, UserCheck, UserX, X } from "lucide-react";
 import { DataTable } from "./data-table";
 import { MaskedNik } from "./masked-nik";
 import { ActivePeriod, DistrictOption, GroupSummary, Kpm, SessionUser } from "@/lib/types";
@@ -37,6 +37,7 @@ function AdminKelompok({ groups, kpm, activePeriod }: { groups: GroupSummary[]; 
   const [showArchived, setShowArchived] = useState(false);
   const [localGroups, setLocalGroups] = useState(groups);
   const [active, setActive] = useState(groups[0]?.id ?? 0);
+  const [showGroupModal, setShowGroupModal] = useState(false);
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<GroupSummary | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -54,6 +55,11 @@ function AdminKelompok({ groups, kpm, activePeriod }: { groups: GroupSummary[]; 
   const ungroupedKpmCount = Math.max(activeKpm.length - groupedKpmCount, 0);
   const current = localGroups.find((group) => group.id === active);
   const groupMembers = current ? activeKpm.filter((row) => current.memberIds.includes(row.id) || current.memberNiks.includes(row.nik)) : [];
+
+  function openGroupModal(group: GroupSummary) {
+    setActive(group.id);
+    setShowGroupModal(true);
+  }
 
   async function deleteGroup() {
     if (!deleteGroupTarget) return;
@@ -124,7 +130,7 @@ function AdminKelompok({ groups, kpm, activePeriod }: { groups: GroupSummary[]; 
       </section>
       {syncMessage ? <p className="rounded-xl bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-700">{syncMessage}</p> : null}
       <DataTable rows={rows as any[]} filename="rekap-kelompok" columns={[
-        { key: "name", header: "Nama Kelompok", render: (row: GroupSummary) => <button onClick={() => setActive(row.id)} className={`font-semibold ${active === row.id ? "text-primary" : "text-slate-900"}`}>{row.name}</button> },
+        { key: "name", header: "Nama Kelompok", render: (row: GroupSummary) => <button onClick={() => openGroupModal(row)} className="font-semibold text-primary underline-offset-2 hover:underline">{row.name}</button> },
         { key: "memberCount", header: "Jumlah KPM" },
         { key: "pendamping", header: "Nama Pendamping" },
         { key: "kecamatan", header: "Kecamatan" },
@@ -133,23 +139,32 @@ function AdminKelompok({ groups, kpm, activePeriod }: { groups: GroupSummary[]; 
         { key: "stage", header: "Tahap" },
         { key: "aksi", header: "Aksi", render: (row: GroupSummary) => <button onClick={() => setDeleteGroupTarget(row)} className="inline-flex h-8 items-center gap-1 rounded-lg bg-rose-50 px-3 text-xs font-semibold text-rose-700"><Trash2 className="h-3.5 w-3.5" /> Hapus</button> }
       ] as any[]} />
-      <section>
-        <div className="mb-3">
-          <h2 className="text-lg font-bold">KPM di Kelompok {current?.name ?? "-"}</h2>
-          <p className="text-sm text-muted-foreground">Klik nama kelompok pada tabel rekap untuk melihat daftar KPM yang masuk kelompok tersebut.</p>
+      {showGroupModal && current ? (
+        <div className="fixed inset-0 z-[500] overflow-y-auto bg-slate-950/40 p-3 sm:p-4">
+          <div className="mx-auto flex max-h-[calc(100dvh-1.5rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)]">
+            <div className="flex items-start justify-between gap-3 border-b border-border p-4">
+              <div className="min-w-0">
+                <h3 className="break-words text-lg font-bold text-slate-900">KPM di Kelompok {current.name}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{groupMembers.length} KPM sudah masuk kelompok ini.</p>
+              </div>
+              <button onClick={() => setShowGroupModal(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-border bg-white hover:bg-slate-50" aria-label="Tutup"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
+              <DataTable rows={groupMembers as any[]} filename="anggota-kelompok-admin" columns={[
+                { key: "nama", header: "Nama Penerima" },
+                { key: "nik", header: "NIK", render: (row: Kpm) => <MaskedNik nik={row.nik} /> },
+                { key: "noKk", header: "No KK" },
+                { key: "alamat", header: "Alamat", render: (row: Kpm) => formatKpmAddress(row) },
+                { key: "rt", header: "RT" },
+                { key: "rw", header: "RW" },
+                { key: "kelurahan", header: "Desa" },
+                { key: "kecamatan", header: "Kecamatan" },
+                { key: "pendamping", header: "Pendamping" }
+              ] as any[]} />
+            </div>
+          </div>
         </div>
-        <DataTable rows={groupMembers as any[]} filename="anggota-kelompok-admin" columns={[
-          { key: "nama", header: "Nama Penerima" },
-          { key: "nik", header: "NIK", render: (row: Kpm) => <MaskedNik nik={row.nik} /> },
-          { key: "noKk", header: "No KK" },
-          { key: "alamat", header: "Alamat" },
-          { key: "rt", header: "RT" },
-          { key: "rw", header: "RW" },
-          { key: "kelurahan", header: "Desa" },
-          { key: "kecamatan", header: "Kecamatan" },
-          { key: "pendamping", header: "Pendamping" }
-        ] as any[]} />
-      </section>
+      ) : null}
       {deleteGroupTarget ? (
         <ConfirmModal
           title="Hapus Kelompok?"
@@ -165,12 +180,14 @@ function AdminKelompok({ groups, kpm, activePeriod }: { groups: GroupSummary[]; 
 
 function PendampingKelompok({ kpm, groups, user, districts, activePeriod }: { kpm: Kpm[]; groups: GroupSummary[]; user: SessionUser; districts: DistrictOption[]; activePeriod: ActivePeriod }) {
   const router = useRouter();
+  const assignedDistrictName = districts.find((item) => item.id === user.districtId)?.name || user.district || "SEMUA";
   const [name, setName] = useState("");
   const [active, setActive] = useState(groups[0]?.id ?? 0);
   const [localGroups, setLocalGroups] = useState(groups);
   const [showArchived, setShowArchived] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
   const [showKpmModal, setShowKpmModal] = useState(false);
-  const [modalKecamatan, setModalKecamatan] = useState("SEMUA");
+  const [modalKecamatan, setModalKecamatan] = useState(assignedDistrictName);
   const [modalDesa, setModalDesa] = useState("SEMUA");
   const [modalMappingStatus, setModalMappingStatus] = useState("SEMUA");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -181,6 +198,7 @@ function PendampingKelompok({ kpm, groups, user, districts, activePeriod }: { kp
   const [submitting, setSubmitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
+  const [infoModal, setInfoModal] = useState<{ title: string; message: string; tone?: "success" | "warning" | "danger" } | null>(null);
 
   useEffect(() => {
     setLocalGroups(groups);
@@ -190,20 +208,18 @@ function PendampingKelompok({ kpm, groups, user, districts, activePeriod }: { kp
   const activeKpm = useMemo(() => kpm.filter((row) => row.tahun === activePeriod.year && row.tahap === activePeriod.stage), [activePeriod.stage, activePeriod.year, kpm]);
   const kecamatanOptions = useMemo(() => {
     const fromKpm = [...new Set(activeKpm.map((row) => row.kecamatan).filter(Boolean))].sort();
-    if (fromKpm.length) return fromKpm;
-    const assignedDistrict = districts.find((item) => item.id === user.districtId)?.name || user.district;
-    return assignedDistrict ? [assignedDistrict] : [];
-  }, [activeKpm, districts, user.district, user.districtId]);
+    return uniqueStrings([assignedDistrictName, ...fromKpm]);
+  }, [activeKpm, assignedDistrictName]);
   const desaOptions = useMemo(() => {
     if (modalKecamatan === "SEMUA") return [];
     return [...new Set(activeKpm.filter((row) => sameText(row.kecamatan, modalKecamatan)).map((row) => row.kelurahan).filter(Boolean))].sort();
   }, [activeKpm, modalKecamatan]);
-  const groupMembers = current ? activeKpm.filter((row) => current.memberIds.includes(row.id) || current.memberNiks.includes(row.nik)) : [];
-  const groupedNikSet = useMemo(() => new Set(localGroups.filter((group) => !group.archived).flatMap((group) => group.memberNiks)), [localGroups]);
-  const groupedKpmCount = activeKpm.filter((row) => groupedNikSet.has(row.nik)).length;
+  const groupMembers = current ? activeKpm.filter((row) => isKpmInGroup(row, current)) : [];
+  const activeGroups = useMemo(() => localGroups.filter((group) => !group.archived), [localGroups]);
+  const groupedKpmCount = activeKpm.filter((row) => activeGroups.some((group) => isKpmInGroup(row, group))).length;
   const ungroupedKpmCount = Math.max(activeKpm.length - groupedKpmCount, 0);
   const modalRows = activeKpm.filter((row) => {
-    const isMapped = groupedNikSet.has(row.nik);
+    const isMapped = activeGroups.some((group) => isKpmInGroup(row, group));
     return (modalKecamatan === "SEMUA" || sameText(row.kecamatan, modalKecamatan)) &&
       (modalDesa === "SEMUA" || sameText(row.kelurahan, modalDesa)) &&
       (modalMappingStatus === "SEMUA" || (modalMappingStatus === "SUDAH" ? isMapped : !isMapped));
@@ -216,21 +232,26 @@ function PendampingKelompok({ kpm, groups, user, districts, activePeriod }: { kp
   }, []);
 
   async function addGroup() {
-    if (!name.trim()) return;
+    const cleanName = name.trim();
+    if (!cleanName) {
+      setInfoModal({ title: "Nama Kelompok Belum Diisi", message: "Isi nama kelompok terlebih dahulu sebelum klik tombol Buat.", tone: "warning" });
+      return;
+    }
     const res = await fetch("/api/kelompok", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, year: activePeriod.year, stage: activePeriod.stage })
+      body: JSON.stringify({ name: cleanName, year: activePeriod.year, stage: activePeriod.stage })
     });
     const json = await res.json();
     if (!res.ok) {
-      alert(json.message ?? "Gagal membuat kelompok");
+      setInfoModal({ title: "Gagal Membuat Kelompok", message: json.message ?? "Gagal membuat kelompok.", tone: "danger" });
       return;
     }
-    const newGroup: GroupSummary = { id: json.id, name, year: activePeriod.year, stage: activePeriod.stage, pendampingId: 0, pendamping: "", kecamatan: kecamatanOptions[0] ?? "", memberCount: 0, memberIds: [], memberNiks: [] };
+    const newGroup: GroupSummary = { id: json.id, name: cleanName, year: activePeriod.year, stage: activePeriod.stage, pendampingId: 0, pendamping: "", kecamatan: kecamatanOptions[0] ?? "", memberCount: 0, memberIds: [], memberNiks: [] };
     setLocalGroups((list) => [newGroup, ...list]);
     setActive(json.id);
     setName("");
+    setInfoModal({ title: "Kelompok Berhasil Dibuat", message: `Kelompok ${cleanName} berhasil ditambahkan.`, tone: "success" });
     router.refresh();
   }
 
@@ -239,6 +260,11 @@ function PendampingKelompok({ kpm, groups, user, districts, activePeriod }: { kp
     setSelectedIds([]);
     setConfirmBatch(false);
     setShowKpmModal(true);
+  }
+
+  function openGroupModal(group: GroupSummary) {
+    setActive(group.id);
+    setShowGroupModal(true);
   }
 
   function toggleSelected(id: number, checked: boolean) {
@@ -257,14 +283,15 @@ function PendampingKelompok({ kpm, groups, user, districts, activePeriod }: { kp
     setSubmitting(true);
     const targets = selectedRows;
     try {
-      for (const row of targets) {
-        const res = await fetch(`/api/kelompok/${current.id}/members`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ kpmId: row.id, kpmNik: row.nik, checked: true })
-        });
-        if (!res.ok) throw new Error((await res.json()).message ?? "Gagal mapping KPM");
-      }
+      const res = await fetch(`/api/kelompok/${current.id}/members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          checked: true,
+          items: targets.map((row) => ({ kpmId: row.id, kpmNik: row.nik }))
+        })
+      });
+      if (!res.ok) throw new Error((await res.json()).message ?? "Gagal mapping KPM");
       setLocalGroups((list) => list.map((group) => {
         const isCurrent = group.id === current.id;
         const targetNiks = targets.map((row) => row.nik);
@@ -389,7 +416,7 @@ function PendampingKelompok({ kpm, groups, user, districts, activePeriod }: { kp
       <section>
         <h2 className="mb-3 text-lg font-bold">Rekap Kelompok Saya</h2>
         <DataTable rows={visibleGroups as any[]} filename="rekap-kelompok-saya" searchPlaceholder="Search Nama saja" columns={[
-          { key: "name", header: "Nama Kelompok", render: (row: GroupSummary) => <button onClick={() => setActive(row.id)} className={`font-semibold ${active === row.id ? "text-primary" : "text-slate-900"}`}>{row.name}</button> },
+          { key: "name", header: "Nama Kelompok", render: (row: GroupSummary) => <button onClick={() => openGroupModal(row)} className="font-semibold text-primary underline-offset-2 hover:underline">{row.name}</button> },
           { key: "memberCount", header: "Jumlah KPM" },
           { key: "year", header: "Tahun" },
           { key: "stage", header: "Tahap" },
@@ -398,32 +425,39 @@ function PendampingKelompok({ kpm, groups, user, districts, activePeriod }: { kp
         ] as any[]} />
       </section>
 
-      <section>
-        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-bold">KPM di Kelompok {current?.name ?? "-"}</h2>
-            <p className="text-sm text-muted-foreground">Klik nama kelompok untuk melihat anggota. Gunakan tombol Tambah KPM untuk mapping, atau tombol hapus pada baris untuk mengeluarkan KPM dari kelompok.</p>
+      {showGroupModal && current ? (
+        <div className="fixed inset-0 z-[500] overflow-y-auto bg-slate-950/40 p-3 sm:p-4">
+          <div className="mx-auto flex max-h-[calc(100dvh-1.5rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)]">
+            <div className="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">KPM di Kelompok {current.name}</h3>
+                <p className="text-sm text-muted-foreground">{groupMembers.length} KPM sudah masuk kelompok ini.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => openMappingModal(current)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white"><Plus className="h-4 w-4" /> Tambah KPM</button>
+                <button onClick={() => setShowGroupModal(false)} className="grid h-10 w-10 place-items-center rounded-lg border border-border bg-white hover:bg-slate-50"><X className="h-5 w-5" /></button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-4">
+              <DataTable rows={groupMembers as any[]} filename="anggota-kelompok" columns={[
+                { key: "nama", header: "Nama Penerima" },
+                { key: "nik", header: "NIK", render: (row: Kpm) => <MaskedNik nik={row.nik} /> },
+                { key: "noKk", header: "No KK" },
+                { key: "alamat", header: "Alamat", render: (row: Kpm) => formatKpmAddress(row) },
+                { key: "rt", header: "RT" },
+                { key: "rw", header: "RW" },
+                { key: "kelurahan", header: "Desa" },
+                { key: "kecamatan", header: "Kecamatan" },
+                { key: "aksi", header: "Aksi", render: (row: Kpm) => <button onClick={() => setRemoveTarget(row)} className="inline-flex h-8 items-center gap-1 rounded-lg bg-rose-50 px-3 text-xs font-semibold text-rose-700"><Trash2 className="h-3.5 w-3.5" /> Hapus</button> }
+              ] as any[]} />
+            </div>
           </div>
-          {current ? (
-            <button onClick={() => openMappingModal(current)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white"><Plus className="h-4 w-4" /> Tambah KPM</button>
-          ) : null}
         </div>
-        <DataTable rows={groupMembers as any[]} filename="anggota-kelompok" columns={[
-          { key: "nama", header: "Nama Penerima" },
-          { key: "nik", header: "NIK", render: (row: Kpm) => <MaskedNik nik={row.nik} /> },
-          { key: "noKk", header: "No KK" },
-          { key: "alamat", header: "Alamat" },
-          { key: "rt", header: "RT" },
-          { key: "rw", header: "RW" },
-          { key: "kelurahan", header: "Desa" },
-          { key: "kecamatan", header: "Kecamatan" },
-          { key: "aksi", header: "Aksi", render: (row: Kpm) => <button onClick={() => setRemoveTarget(row)} className="inline-flex h-8 items-center gap-1 rounded-lg bg-rose-50 px-3 text-xs font-semibold text-rose-700"><Trash2 className="h-3.5 w-3.5" /> Hapus</button> }
-        ] as any[]} />
-      </section>
+      ) : null}
 
       {showKpmModal && current ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-3 sm:p-4">
-          <div className="mx-auto flex max-h-[calc(100dvh-1.5rem)] w-full max-w-6xl flex-col rounded-2xl bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)]">
+        <div className="fixed inset-0 z-[510] overflow-y-auto bg-slate-950/40 p-3 sm:p-4">
+          <div className="mx-auto flex max-h-[calc(100dvh-1.5rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)]">
             <div className="flex items-center justify-between border-b border-border p-4">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Tambah KPM ke {current.name}</h3>
@@ -434,8 +468,7 @@ function PendampingKelompok({ kpm, groups, user, districts, activePeriod }: { kp
             <div className="flex flex-wrap items-end gap-3 border-b border-border p-3 sm:p-4 [&>label]:w-full [&>label]:sm:w-auto [&_select]:w-full">
               <label className="text-sm font-semibold">
                 Kecamatan
-                <select value={modalKecamatan} onChange={(e) => { setModalKecamatan(e.target.value); setModalDesa("SEMUA"); }} className="mt-1 block h-10 rounded-lg border border-border bg-white px-3">
-                  <option>SEMUA</option>
+                <select value={modalKecamatan} disabled onChange={(e) => { setModalKecamatan(e.target.value); setModalDesa("SEMUA"); }} className="mt-1 block h-10 rounded-lg border border-border bg-slate-100 px-3 text-slate-700">
                   {kecamatanOptions.map((item) => <option key={item}>{item}</option>)}
                 </select>
               </label>
@@ -470,15 +503,16 @@ function PendampingKelompok({ kpm, groups, user, districts, activePeriod }: { kp
                 ) },
                 { key: "nik", header: "NIK", render: (row: Kpm) => <MaskedNik nik={row.nik} /> },
                 { key: "noKk", header: "No KK" },
-                { key: "alamat", header: "Alamat" },
+                { key: "alamat", header: "Alamat", render: (row: Kpm) => formatKpmAddress(row) },
                 { key: "rt", header: "RT" },
                 { key: "rw", header: "RW" },
                 { key: "kelurahan", header: "Desa" },
                 { key: "kecamatan", header: "Kecamatan" },
                 { key: "statusKelompok", header: "Status Kelompok", render: (row: Kpm) => {
-                  const owner = localGroups.find((group) => group.memberNiks.includes(row.nik));
+                  const owner = localGroups.find((group) => isKpmInGroup(row, group));
                   if (!owner) return <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">Belum masuk</span>;
-                  return <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">{owner.id === current.id ? "Sudah di kelompok ini" : `Di ${owner.name}`}</span>;
+                  if (owner.id === current.id) return <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">Sudah di kelompok ini</span>;
+                  return <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">{`Di ${owner.name}`}</span>;
                 } }
               ] as any[]} />
             </div>
@@ -519,25 +553,93 @@ function PendampingKelompok({ kpm, groups, user, districts, activePeriod }: { kp
           onConfirm={deleteGroup}
         />
       ) : null}
+      {infoModal ? (
+        <InfoModal
+          title={infoModal.title}
+          message={infoModal.message}
+          tone={infoModal.tone ?? "success"}
+          onClose={() => setInfoModal(null)}
+        />
+      ) : null}
     </div>
   );
 }
 
+function isKpmInGroup(row: Kpm, group: GroupSummary) {
+  return group.memberIds.includes(row.id) || group.memberNiks.some((nik) => normalizeNik(nik) === normalizeNik(row.nik));
+}
+
 function ConfirmModal({ title, message, loading, onCancel, onConfirm }: { title: string; message: string; loading: boolean; onCancel: () => void; onConfirm: () => void }) {
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/40 p-4">
+    <div className="fixed inset-0 z-[520] grid place-items-center bg-slate-950/40 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
         <h3 className="text-lg font-bold text-slate-900">{title}</h3>
         <p className="mt-3 text-sm text-slate-600">{message}</p>
         <div className="mt-5 flex justify-end gap-2">
           <button disabled={loading} onClick={onCancel} className="h-10 rounded-lg border border-border px-4 text-sm font-semibold text-slate-700 disabled:opacity-60">Batal</button>
-          <button disabled={loading} onClick={onConfirm} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:opacity-60">{loading ? "Memproses..." : "Ya, lanjutkan"}</button>
+          <button disabled={loading} onClick={onConfirm} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-75">
+            {loading ? <><Loader2 className="h-4 w-4 animate-spin" />Memproses...</> : "Ya, lanjutkan"}
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
+function InfoModal({ title, message, tone, onClose }: { title: string; message: string; tone: "success" | "warning" | "danger"; onClose: () => void }) {
+  const toneClass = {
+    success: "bg-emerald-50 text-emerald-700",
+    warning: "bg-amber-50 text-amber-700",
+    danger: "bg-rose-50 text-rose-700"
+  }[tone];
+
+  return (
+    <div className="fixed inset-0 z-[530] grid place-items-center bg-slate-950/40 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-3">
+          <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${toneClass}`}>
+            {tone === "success" ? <UserCheck className="h-5 w-5" /> : <AlertIcon />}
+          </div>
+          <button onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg hover:bg-slate-100">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <h3 className="mt-4 text-lg font-bold text-slate-900">{title}</h3>
+        <p className="mt-2 text-sm text-slate-600">{message}</p>
+        <div className="mt-5 flex justify-end">
+          <button onClick={onClose} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white">Oke</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AlertIcon() {
+  return <span className="text-lg font-black leading-none">!</span>;
+}
+
 function sameText(left: string, right: string) {
   return left.trim().toUpperCase() === right.trim().toUpperCase();
+}
+
+function normalizeNik(value: string) {
+  return value.trim();
+}
+
+function uniqueStrings(values: string[]) {
+  const uniqueValues = new Map<string, string>();
+
+  for (const value of values) {
+    const cleanValue = value.trim();
+    const normalizedValue = cleanValue.toLocaleUpperCase("id-ID");
+    if (cleanValue && !uniqueValues.has(normalizedValue)) {
+      uniqueValues.set(normalizedValue, cleanValue);
+    }
+  }
+
+  return [...uniqueValues.values()].sort((a, b) => a.localeCompare(b, "id-ID"));
+}
+
+function formatKpmAddress(row: Kpm) {
+  return row.alamatFc || "-";
 }

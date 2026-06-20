@@ -50,6 +50,15 @@ function dateValue(value: string) {
   return null;
 }
 
+async function forEachIdChunk(ids: number[], action: (placeholders: string, chunk: number[]) => Promise<void>) {
+  const chunkSize = 500;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    if (!chunk.length) continue;
+    await action(chunk.map(() => "?").join(","), chunk);
+  }
+}
+
 export async function POST(request: Request) {
   const user = await getSession();
   if (user.role !== "ADMIN") return NextResponse.json({ message: "Forbidden" }, { status: 403 });
@@ -107,6 +116,7 @@ export async function POST(request: Request) {
       kabupaten: cell(row, "KABUPATEN") || "KAB. JEMBER",
       provinsi: cell(row, "PROVINSI") || "JAWA TIMUR"
     }));
+  if (!values.length) return NextResponse.json({ message: "Tidak ada baris valid. Pastikan NIK, No KK, dan Nama Penerima terisi." }, { status: 400 });
 
   const connection = await pool.getConnection();
   try {
@@ -119,18 +129,37 @@ export async function POST(request: Request) {
     const uniqueNiks = [...new Set(values.map((row) => row.nik))];
     const existingMap = new Map<string, number>();
     const carryPendampingMap = new Map<string, number>();
+    const uploadedNikSet = new Set(uniqueNiks);
+    const [sameScopeRows] = await connection.query(
+      `SELECT id, nik
+       FROM kpm_final_closing
+       WHERE year = ?
+         AND stage = ?
+         AND UPPER(TRIM(kecamatan)) = UPPER(TRIM(?))`,
+      [year, stage, district.name]
+    );
+    const staleIds: number[] = [];
+    for (const row of sameScopeRows as { id: number; nik: string }[]) {
+      if (uploadedNikSet.has(row.nik)) {
+        existingMap.set(row.nik, row.id);
+      } else {
+        staleIds.push(row.id);
+      }
+    }
+    await forEachIdChunk(staleIds, async (placeholders, chunk) => {
+      await connection.query(`UPDATE p2k2_group_members SET kpm_id = NULL WHERE kpm_id IN (${placeholders})`, chunk);
+      try {
+        await connection.query(`UPDATE rekon_transactions SET kpm_id = NULL WHERE kpm_id IN (${placeholders})`, chunk);
+      } catch (error: any) {
+        if (error?.code !== "ER_NO_SUCH_TABLE") throw error;
+      }
+      await connection.query(`DELETE FROM kpm_final_closing WHERE id IN (${placeholders})`, chunk);
+    });
+
     const lookupChunkSize = 1000;
     for (let i = 0; i < uniqueNiks.length; i += lookupChunkSize) {
       const chunk = uniqueNiks.slice(i, i + lookupChunkSize);
       const placeholders = chunk.map(() => "?").join(",");
-      const [existingRows] = await connection.query(
-        `SELECT id, nik FROM kpm_final_closing WHERE year = ? AND stage = ? AND nik IN (${placeholders})`,
-        [year, stage, ...chunk]
-      );
-      for (const row of existingRows as { id: number; nik: string }[]) {
-        existingMap.set(row.nik, row.id);
-      }
-
       const [previousRows] = await connection.query(
         `SELECT nik, pendamping_id
          FROM kpm_final_closing
@@ -230,10 +259,10 @@ export async function POST(request: Request) {
     await connection.execute("INSERT INTO activity_logs (user_id, action, entity, entity_id, description) VALUES (?, 'IMPORT', 'kpm_final_closing', ?, ?)", [
       user.id,
       String(batchId),
-      `Import Final Closing ${file.name}: ${insertRows.length} insert, ${updateRows.length} update, ${carryPendampingMap.size} NIK membawa pendamping tahap sebelumnya, ${district.name}, tahun ${year} tahap ${stage}`
+      `Import Final Closing ${file.name}: ${insertRows.length} insert, ${updateRows.length} update, ${staleIds.length} hapus data lama, ${carryPendampingMap.size} NIK membawa pendamping tahap sebelumnya, ${district.name}, tahun ${year} tahap ${stage}`
     ]);
     await connection.commit();
-    return NextResponse.json({ imported: insertRows.length, updated: updateRows.length, carriedPendamping: carryPendampingMap.size, total: values.length, batchId, district: district.name, file: file.name });
+    return NextResponse.json({ imported: insertRows.length, updated: updateRows.length, removed: staleIds.length, carriedPendamping: carryPendampingMap.size, total: values.length, batchId, district: district.name, file: file.name });
   } catch (error: any) {
     await connection.rollback();
     return NextResponse.json({ message: error?.sqlMessage ?? error?.message ?? "Import gagal" }, { status: 500 });

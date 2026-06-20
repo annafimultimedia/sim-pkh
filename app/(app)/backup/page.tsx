@@ -11,7 +11,7 @@ export default async function BackupPage() {
   const [settings, files] = await Promise.all([getBackupSettings(), getBackupFiles()]);
   return (
     <>
-      <PageHeader title="Backup & Restore" description="Backup database SQL, restore data, dan jadwal backup otomatis harian." />
+      <PageHeader title="Backup & Restore" description="Backup database SQL, restore data, dan jadwal backup otomatis harian, mingguan, atau bulanan." />
       <BackupClient initialSettings={settings} initialFiles={files} />
     </>
   );

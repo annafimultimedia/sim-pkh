@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { BookOpen, Eye, EyeOff, HeartPulse, KeyRound, UserRound, UsersRound } from "lucide-react";
+import { BookOpen, Eye, EyeOff, HeartPulse, KeyRound, Loader2, UserRound, UsersRound } from "lucide-react";
 
 const featureItems = [
   {
@@ -32,22 +32,30 @@ export function LoginForm() {
   const [error, setError] = useState("");
 
   async function login() {
+    if (loading) return;
+
     setError("");
-
     setLoading(true);
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password })
-    });
-    setLoading(false);
 
-    if (!res.ok) {
-      setError("Username atau password tidak sesuai.");
-      return;
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+
+      if (!res.ok) {
+        setError("Username atau password tidak sesuai.");
+        setLoading(false);
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setError("Tidak dapat terhubung ke server. Silakan coba kembali.");
+      setLoading(false);
     }
-    router.push("/dashboard");
-    router.refresh();
   }
 
   return (
@@ -99,7 +107,7 @@ export function LoginForm() {
                 <Image src="/images/pkh-logo.png" alt="PKH" width={420} height={217} priority className="h-auto w-[190px] max-w-full object-contain" />
               </div>
               <h2 className="mt-7 text-2xl font-extrabold text-slate-950">
-                Selamat Datang di <span className="bg-gradient-to-r from-blue-700 via-sky-500 to-emerald-500 bg-clip-text text-transparent">SIM-P2K2</span>
+                Selamat Datang di <span className="bg-gradient-to-r from-blue-700 via-sky-500 to-emerald-500 bg-clip-text text-transparent">SIM-PKH</span>
               </h2>
               <p className="mt-3 text-sm font-bold text-slate-700 sm:text-base">Silakan masuk untuk melanjutkan ke dashboard</p>
             </div>
@@ -113,8 +121,9 @@ export function LoginForm() {
                     name="username"
                     placeholder="Masukkan username"
                     value={username}
+                    disabled={loading}
                     onChange={(event) => setUsername(event.target.value)}
-                    className="h-[52px] w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-12 pr-4 text-sm font-semibold text-slate-900 shadow-sm outline-none transition placeholder:text-slate-500 focus:border-sky-400 focus:ring-4 focus:ring-sky-300/25"
+                    className="h-[52px] w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-12 pr-4 text-sm font-semibold text-slate-900 shadow-sm outline-none transition placeholder:text-slate-500 focus:border-sky-400 focus:ring-4 focus:ring-sky-300/25 disabled:cursor-wait disabled:bg-slate-50"
                   />
                 </span>
               </label>
@@ -128,11 +137,12 @@ export function LoginForm() {
                     placeholder="Masukkan password"
                     type={showPassword ? "text" : "password"}
                     value={password}
+                    disabled={loading}
                     onChange={(event) => setPassword(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" && !loading) login();
                     }}
-                    className="h-[52px] w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-12 pr-12 text-sm font-semibold text-slate-900 shadow-sm outline-none transition placeholder:text-slate-500 focus:border-sky-400 focus:ring-4 focus:ring-sky-300/25"
+                    className="h-[52px] w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-12 pr-12 text-sm font-semibold text-slate-900 shadow-sm outline-none transition placeholder:text-slate-500 focus:border-sky-400 focus:ring-4 focus:ring-sky-300/25 disabled:cursor-wait disabled:bg-slate-50"
                   />
                   <button type="button" tabIndex={-1} onClick={() => setShowPassword((show) => !show)} className="absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-slate-500 transition hover:bg-white/70">
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -142,8 +152,8 @@ export function LoginForm() {
 
               {error && <p className="rounded-xl bg-rose-50/90 px-4 py-3 text-sm font-semibold text-rose-700 shadow-sm">{error}</p>}
 
-              <button type="button" onClick={login} disabled={loading} className="h-12 w-full rounded-xl bg-gradient-to-r from-blue-600 to-emerald-500 text-base font-bold text-white shadow-[0_16px_30px_rgba(37,99,235,0.28)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60">
-                {loading ? "Memproses..." : "Masuk"}
+              <button type="button" onClick={login} disabled={loading} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-emerald-500 text-base font-bold text-white shadow-[0_16px_30px_rgba(37,99,235,0.28)] transition hover:brightness-105 disabled:cursor-wait disabled:opacity-75">
+                {loading ? <><Loader2 className="h-5 w-5 animate-spin" />Memproses...</> : "Masuk"}
               </button>
             </div>
 

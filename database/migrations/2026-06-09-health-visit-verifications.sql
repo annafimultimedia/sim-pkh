@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS health_visit_verifications (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  kpm_id BIGINT NOT NULL,
+  elder_slot_no INT NOT NULL,
+  elder_nik VARCHAR(30) NOT NULL,
+  elder_name VARCHAR(180) NOT NULL,
+  no_kk VARCHAR(30) NOT NULL,
+  group_id BIGINT NULL,
+  group_name VARCHAR(160) NULL,
+  year SMALLINT NOT NULL,
+  month TINYINT NOT NULL,
+  visit_date DATE NOT NULL,
+  attendance_status ENUM('HADIR','TIDAK_HADIR') NOT NULL,
+  note VARCHAR(500) NULL,
+  verified_by BIGINT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_health_visit_month (kpm_id, elder_slot_no, year, month),
+  INDEX idx_health_visit_nik (elder_nik),
+  FOREIGN KEY (kpm_id) REFERENCES kpm_final_closing(id),
+  FOREIGN KEY (verified_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;

@@ -8,7 +8,8 @@ import { SessionUser } from "@/lib/types";
 
 export async function POST(request: Request) {
   const { username, password } = await request.json();
-  const login = String(username ?? "").toLowerCase();
+  const login = String(username ?? "").trim().toLowerCase();
+  let databaseError = false;
   try {
     await ensureProfilePhotoColumn();
     const rows = await query<{
@@ -52,10 +53,15 @@ export async function POST(request: Request) {
       };
       await query("UPDATE users SET current_session_token = ?, last_seen_at = NOW() WHERE id = ?", [sessionToken, user.id]);
       await setSession(session);
-      await query("INSERT INTO activity_logs (user_id, action, entity, description) VALUES (?, 'LOGIN', 'auth', ?)", [session.id, `Login berhasil: ${session.name} (${session.role})`]);
+      try {
+        await query("INSERT INTO activity_logs (user_id, action, entity, description) VALUES (?, 'LOGIN', 'auth', ?)", [session.id, `Login berhasil: ${session.name} (${session.role})`]);
+      } catch (error) {
+        console.error("Gagal mencatat aktivitas login", error);
+      }
       return NextResponse.json({ user: session });
     }
   } catch (error) {
+    databaseError = true;
     console.error("Login MySQL gagal, memakai fallback demo", error);
   }
 
@@ -67,6 +73,9 @@ export async function POST(request: Request) {
       await setSession(session);
       return NextResponse.json({ user: session });
     }
+  }
+  if (databaseError) {
+    return NextResponse.json({ message: "Database sedang tidak dapat diakses. Silakan coba beberapa saat lagi." }, { status: 503 });
   }
   return NextResponse.json({ message: "Invalid credentials" }, { status: 401 });
 }

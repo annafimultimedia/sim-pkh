@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BarChart, Bar, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, FileCheck2, HandCoins, Layers3, Loader2, Plus, RefreshCw, Users, X } from "lucide-react";
+import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, FileCheck2, HandCoins, Layers3, Loader2, Plus, RefreshCw, Trophy, Users, X } from "lucide-react";
 import { DeadlineTask, DistrictOption } from "@/lib/types";
 
 type OnlineUser = {
@@ -62,6 +62,7 @@ export function DashboardClient({ data, onlineUsers = [], isAdmin = false, tasks
     { label: "Belum Termapping", value: data.unmapped.toLocaleString("id-ID"), icon: AlertTriangle, color: "bg-rose-50 text-rose-700" }
   ];
   const alerts = data.alerts ?? {};
+  const activePendampingP2k2 = Array.isArray(data.activePendampingP2k2) ? data.activePendampingP2k2 : [];
 
   async function deleteTask(task: DeadlineTask) {
     const res = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
@@ -156,6 +157,38 @@ export function DashboardClient({ data, onlineUsers = [], isAdmin = false, tasks
             <MiniStat label="Laporan Terkirim" value={alerts.p2k2Terkirim ?? 0} tone="emerald" />
             <MiniStat label="Draft" value={alerts.p2k2Draft ?? 0} tone="amber" />
             <MiniStat label="Belum Dibuat" value={alerts.p2k2BelumDibuat ?? 0} tone="rose" />
+          </div>
+        </div>
+        <div className="rounded-2xl border border-border bg-white p-5 shadow-soft">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold">Pendamping Aktif P2K2 - Bulan Ini</h2>
+              <p className="mt-1 text-sm text-muted-foreground">20 pendamping teratas berdasarkan laporan P2K2 terkirim.</p>
+            </div>
+            <div className="grid h-11 w-11 place-items-center rounded-xl bg-amber-50 text-amber-700">
+              <Trophy className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">
+            {activePendampingP2k2.length ? activePendampingP2k2.map((item: any, index: number) => {
+              const isCurrentUser = Number(item.userId) === Number(data.currentUserId);
+              return (
+                <div key={`${item.pendampingId}-${item.pendamping}`} className={`grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border px-3 py-2 text-sm ${isCurrentUser ? "border-primary/30 bg-primary/5" : "border-border bg-slate-50"}`}>
+                  <span className={`grid h-8 w-8 place-items-center rounded-lg text-xs font-bold ${index < 3 ? "bg-amber-100 text-amber-800" : "bg-white text-slate-700"}`}>
+                    {index + 1}.
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-slate-900">{item.pendamping}{isCurrentUser ? <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">Anda</span> : null}</p>
+                    <p className="truncate text-xs text-muted-foreground">{item.kecamatan || "-"}</p>
+                  </div>
+                  <span className="shrink-0 rounded-lg bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-border">
+                    {Number(item.totalPertemuan ?? 0).toLocaleString("id-ID")} pertemuan
+                  </span>
+                </div>
+              );
+            }) : (
+              <p className="rounded-xl border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">Belum ada laporan P2K2 terkirim bulan ini.</p>
+            )}
           </div>
         </div>
         <div className="rounded-2xl border border-border bg-white p-5 shadow-soft">
@@ -265,7 +298,7 @@ export function DashboardClient({ data, onlineUsers = [], isAdmin = false, tasks
         </section>
       ) : null}
       {popupOpen ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4">
+        <div className="fixed inset-0 z-[500] overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4">
           <section className="mx-auto w-full max-w-lg rounded-2xl bg-white p-4 shadow-soft sm:p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -293,7 +326,7 @@ export function DashboardClient({ data, onlineUsers = [], isAdmin = false, tasks
         </div>
       ) : null}
       {taskModal ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4">
+        <div className="fixed inset-0 z-[500] overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4">
           <section className="mx-auto w-full max-w-lg rounded-2xl bg-white p-4 shadow-soft sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-bold">{editingTask ? "Ubah Tugas Deadline" : "Tambah Tugas Deadline"}</h2>

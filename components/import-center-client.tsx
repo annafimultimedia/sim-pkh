@@ -80,7 +80,7 @@ export function ImportCenterClient({ districts, logs, activePeriod }: { district
     setFile(null);
     setDistrictText("");
     if (fileRef.current) fileRef.current.value = "";
-    setModal({ open: true, status: "success", title: "Import berhasil", message: `${json.imported} data baru dan ${json.updated ?? 0} data update berhasil diproses untuk Kecamatan ${json.district}, Tahun ${year} Tahap ${stage}. ${json.carriedPendamping ?? 0} NIK otomatis mengikuti pendamping dari tahap sebelumnya.` });
+    setModal({ open: true, status: "success", title: "Import berhasil", message: `${json.imported} data baru, ${json.updated ?? 0} data update, dan ${json.removed ?? 0} data lama yang tidak ada di Excel terbaru telah disesuaikan untuk Kecamatan ${json.district}, Tahun ${year} Tahap ${stage}. ${json.carriedPendamping ?? 0} NIK otomatis mengikuti pendamping dari tahap sebelumnya.` });
     router.refresh();
   }
 
@@ -196,7 +196,7 @@ export function ImportCenterClient({ districts, logs, activePeriod }: { district
       </section>
 
       {modal.open && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4">
+        <div className="fixed inset-0 z-[500] overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4">
           <section className="mx-auto w-full max-w-md rounded-2xl bg-white p-4 shadow-soft sm:p-5">
             <div className="flex items-start gap-3">
               <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${modal.status === "processing" ? "bg-sky-50 text-sky-700" : modal.status === "success" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
@@ -219,7 +219,7 @@ export function ImportCenterClient({ districts, logs, activePeriod }: { district
       )}
 
       {confirmClear && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4">
+        <div className="fixed inset-0 z-[500] overflow-y-auto bg-slate-950/40 p-3 sm:grid sm:place-items-center sm:p-4">
           <section className="mx-auto w-full max-w-md rounded-2xl bg-white p-4 shadow-soft sm:p-5">
             <div className="flex items-start gap-3">
               <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-700">

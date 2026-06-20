@@ -1,0 +1,14 @@
+.git
+.github
+.next
+.next-dev
+node_modules
+.env
+.env.*
+!.env.docker.example
+storage
+public/uploads
+*.log
+*.zip
+tsconfig.tsbuildinfo
+

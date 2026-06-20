@@ -101,4 +101,54 @@ body {
     page-break-inside: avoid;
     page-break-after: auto;
   }
+
+  .health-print-sheet {
+    page: health-control;
+    position: static !important;
+    display: grid !important;
+    max-width: none !important;
+    width: 215mm !important;
+    height: 330mm !important;
+    min-height: 330mm !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    grid-template-rows: repeat(4, 1fr) !important;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .health-print-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .health-control-card {
+    width: auto !important;
+    height: 82.5mm !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border-style: dashed !important;
+    border-color: #475569 !important;
+  }
+
+  .health-print-sheet table {
+    font-size: 7px !important;
+    line-height: 1 !important;
+  }
+
+  .health-print-sheet th,
+  .health-print-sheet td {
+    height: auto !important;
+    padding: 1px 2px !important;
+    white-space: nowrap !important;
+  }
+
+  .health-print-sheet td:last-child {
+    height: auto !important;
+    vertical-align: middle !important;
+  }
+}
+
+@page health-control {
+  size: 215mm 330mm;
+  margin: 0;
 }

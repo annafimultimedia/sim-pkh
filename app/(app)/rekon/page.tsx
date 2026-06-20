@@ -2,9 +2,11 @@ import { PageHeader } from "@/components/app-shell";
 import { RekonClient } from "@/components/rekon-client";
 import { getSession } from "@/lib/auth";
 import { getActivePeriod, getRekonRows } from "@/lib/data";
+import { requireMenuAccess } from "@/lib/menu-access";
 
 export default async function RekonPage() {
   const user = await getSession();
+  await requireMenuAccess(user, "rekon");
   const activePeriod = await getActivePeriod();
   const rows = await getRekonRows(user, activePeriod);
 

@@ -236,7 +236,7 @@ export function ArtClient({ rows, user, districts, villages }: { rows: ArtRow[];
       />
 
       {confirmImport ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
+        <div className="fixed inset-0 z-[500] grid place-items-center bg-slate-950/40 p-4">
           <section className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-soft">
             <div className="flex items-start gap-3">
               <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-700">
@@ -258,7 +258,7 @@ export function ArtClient({ rows, user, districts, villages }: { rows: ArtRow[];
       ) : null}
 
       {modal.open ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
+        <div className="fixed inset-0 z-[510] grid place-items-center bg-slate-950/40 p-4">
           <section className="w-full max-w-md rounded-2xl bg-white p-5 shadow-soft">
             <div className="flex items-start gap-3">
               <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${modal.status === "processing" ? "bg-sky-50 text-sky-700" : modal.status === "success" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>

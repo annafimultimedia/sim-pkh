@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ensureSuratArchivesTable } from "@/lib/data";
 import { query } from "@/lib/db";
+import { deletePublicUpload } from "@/lib/upload-files";
 
 const maxFileSize = 5 * 1024 * 1024;
 
@@ -56,13 +57,14 @@ export async function DELETE(request: Request) {
   const id = Number(url.searchParams.get("id"));
   if (!id) return NextResponse.json({ message: "ID surat wajib diisi" }, { status: 400 });
 
-  const rows = await query<{ id: number; created_by: number; perihal: string }>("SELECT id, created_by, perihal FROM surat_archives WHERE id = ? LIMIT 1", [id]);
+  const rows = await query<{ id: number; created_by: number; perihal: string; file_path: string | null }>("SELECT id, created_by, perihal, file_path FROM surat_archives WHERE id = ? LIMIT 1", [id]);
   const row = rows[0];
   if (!row) return NextResponse.json({ message: "Surat tidak ditemukan" }, { status: 404 });
   if (user.role !== "ADMIN" && row.created_by !== user.id) return NextResponse.json({ message: "Anda hanya bisa menghapus surat yang Anda input" }, { status: 403 });
 
   await query("DELETE FROM surat_archives WHERE id = ?", [id]);
   await query("INSERT INTO activity_logs (user_id, action, entity, entity_id, description) VALUES (?, 'DELETE', 'surat_archives', ?, ?)", [user.id, String(id), `Hapus arsip surat: ${row.perihal}`]);
+  await deletePublicUpload(row.file_path, "uploads/surat/");
   return NextResponse.json({ ok: true });
 }
 

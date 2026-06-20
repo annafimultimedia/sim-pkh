@@ -44,6 +44,14 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
+CREATE TABLE IF NOT EXISTS role_menu_access (
+  role ENUM('PENDAMPING') NOT NULL,
+  menu_key VARCHAR(80) NOT NULL,
+  is_enabled TINYINT(1) NOT NULL DEFAULT 0,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (role, menu_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
 CREATE TABLE IF NOT EXISTS pendamping_profiles (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   user_id BIGINT NOT NULL,
@@ -130,8 +138,13 @@ CREATE TABLE IF NOT EXISTS art_members (
   kabupaten VARCHAR(120) NULL,
   status VARCHAR(120) NULL,
   periode VARCHAR(120) NULL,
+  entry_source VARCHAR(20) NOT NULL DEFAULT 'IMPORT',
+  health_kpm_id BIGINT NULL,
+  health_slot_no INT NULL,
+  health_component_type VARCHAR(20) NULL,
   FOREIGN KEY (import_batch_id) REFERENCES import_batches(id),
-  INDEX idx_art_search (no_kk, nik, nama)
+  INDEX idx_art_search (no_kk, nik, nama),
+  INDEX idx_art_health_slot (health_kpm_id, health_slot_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 CREATE TABLE IF NOT EXISTS p2k2_groups (
@@ -239,6 +252,30 @@ CREATE TABLE IF NOT EXISTS surat_archives (
   created_by BIGINT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (created_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+CREATE TABLE IF NOT EXISTS health_visit_verifications (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  kpm_id BIGINT NOT NULL,
+  elder_slot_no INT NOT NULL,
+  component_type VARCHAR(20) NOT NULL DEFAULT 'LANSIA',
+  elder_nik VARCHAR(30) NOT NULL,
+  elder_name VARCHAR(180) NOT NULL,
+  no_kk VARCHAR(30) NOT NULL,
+  group_id BIGINT NULL,
+  group_name VARCHAR(160) NULL,
+  year SMALLINT NOT NULL,
+  month TINYINT NOT NULL,
+  visit_date DATE NOT NULL,
+  attendance_status ENUM('HADIR','TIDAK_HADIR') NOT NULL,
+  note VARCHAR(500) NULL,
+  verified_by BIGINT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_health_visit_component_month (kpm_id, component_type, elder_slot_no, year, month),
+  INDEX idx_health_visit_nik (elder_nik),
+  FOREIGN KEY (kpm_id) REFERENCES kpm_final_closing(id),
+  FOREIGN KEY (verified_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 CREATE TABLE IF NOT EXISTS activity_logs (
